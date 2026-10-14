@@ -41,8 +41,6 @@ def build(source, target, manifest, identity='-'):
     (target / 'Contents/Resources/usb-overrides.json').write_text(json.dumps(overrides, indent=2) + '\n')
     for name in ('LICENSE', 'NOTICE.md'):
         run('/usr/bin/ditto', ROOT / name, target / 'Contents/Resources' / ('QuestVDUSB-' + name))
-    run('/usr/bin/ditto', ROOT / 'packaging/dmgbuild-LICENSE.txt',
-        target / 'Contents/Resources/QuestVDUSB-DMG-Background-LICENSE.txt')
     library = target / 'Contents/MacOS/libQuestVDUSB.dylib'
     run('/usr/bin/xcrun', 'clang', '-arch', 'arm64', '-mmacosx-version-min=13.3', '-dynamiclib', '-O2',
         '-Wall', '-Wextra', '-Werror', ROOT / 'src/USBConfig.c', '-o', library,
@@ -91,13 +89,19 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
     if Path(filename).name != filename or not filename.endswith('.dmg'):
         raise ValueError('Invalid artifact filename')
     result = dist / filename
+    background = output / 'dmg-background'
+    run('/usr/bin/xcrun', 'swift', '-warnings-as-errors', ROOT / 'packaging/dmg-background.swift',
+        background, manifest['version'])
     dmgbuild.build_dmg(str(result), 'Quest Virtual Display USB', settings={
         'format': 'UDZO', 'files': [str(target), str(readme)],
         'symlinks': {'Applications': '/Applications'},
-        'background': 'builtin-arrow', 'window_rect': ((180, 180), (640, 420)),
-        'icon_locations': {target.name: (150, 120), 'Applications': (490, 120), 'Readme.txt': (320, 310)},
+        # Leave room for Finder's optional tab and status bars.
+        'background': str(background.with_suffix('.png')), 'window_rect': ((160, 180), (760, 600)),
+        'icon_locations': {target.name: (190, 214), 'Applications': (570, 214), 'Readme.txt': (380, 402)},
         'hide_extensions': ['Readme.txt'],
-        'default_view': 'icon-view', 'icon_size': 96, 'text_size': 13,
+        'default_view': 'icon-view', 'icon_size': 88, 'text_size': 13,
+        'include_icon_view_settings': True, 'include_list_view_settings': False,
+        'arrange_by': None, 'grid_spacing': 90, 'scroll_position': (0, 0), 'label_pos': 'bottom',
         'show_icon_preview': False, 'show_status_bar': False, 'show_tab_view': False,
         'show_toolbar': False, 'show_pathbar': False, 'show_sidebar': False,
     })
