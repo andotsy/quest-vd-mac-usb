@@ -4,7 +4,8 @@
 
 The Linux check job fetches Meta's small `binary-info` JSON and lists existing
 GitHub releases. A matching `meta-<version>-usb.<revision>` tag, including a draft,
-skips the macOS job entirely. API failures stop the run instead of being mistaken
+skips the macOS job entirely. A newer published project release also prevents an
+older checkout from publishing a downgrade. API failures stop the run instead of being mistaken
 for an absent release. A concurrency group serializes publishers in a repository.
 
 The newest reviewed manifest is a floor during phased rollouts. If the feed is

@@ -91,17 +91,21 @@ def download(manifest, target):
             return target
         raise ValueError('Existing download does not match manifest; choose a new output directory')
     partial = target.with_suffix('.partial')
+    created = False
     try:
-        with open_official(manifest['url']) as response, partial.open('xb') as stream:
+        with partial.open('xb') as stream:
+            created = True
             total = 0
-            for chunk in iter(lambda: response.read(1024 * 1024), b''):
-                total += len(chunk)
-                if total > manifest['size']:
-                    raise ValueError('Download larger than verified manifest')
-                stream.write(chunk)
+            with open_official(manifest['url']) as response:
+                for chunk in iter(lambda: response.read(1024 * 1024), b''):
+                    total += len(chunk)
+                    if total > manifest['size']:
+                        raise ValueError('Download larger than verified manifest')
+                    stream.write(chunk)
         if total != manifest['size'] or sha256(partial) != manifest['dmg_sha256']:
             raise ValueError('Official download checksum/size mismatch')
         partial.rename(target)
     finally:
-        partial.unlink(missing_ok=True)
+        if created:
+            partial.unlink(missing_ok=True)
     return target

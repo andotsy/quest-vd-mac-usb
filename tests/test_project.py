@@ -79,9 +79,20 @@ class ReleaseTests(unittest.TestCase):
             self.assertFalse(p['needs_build'])
 
     def test_new_patch_revision_can_release_same_meta_version(self):
+        previous_tag = upstream.tag_for(self.m)
         self.m['patch_revision'] += 1
-        p = release.make_plan(self.meta, self.known, 'someone/fork', exists=lambda repo, tag: tag.endswith('usb.1'))
+        p = release.make_plan(self.meta, self.known, 'someone/fork', exists=lambda repo, tag: tag == previous_tag)
         self.assertTrue(p['needs_build'])
+
+    def test_old_checkout_cannot_supersede_newer_release(self):
+        response = [[{'tag_name': 'meta-111.0.0.1.108-usb.1', 'draft': False, 'prerelease': False}]]
+        with patch('release.gh', return_value=json.dumps(response)):
+            self.assertTrue(release.release_exists('someone/fork', upstream.tag_for(self.m)))
+
+    def test_release_api_failure_does_not_trigger_a_build(self):
+        with patch('release.gh', side_effect=RuntimeError('API unavailable')):
+            with self.assertRaisesRegex(RuntimeError, 'API unavailable'):
+                release.make_plan(self.meta, self.known, 'someone/fork')
 
     def test_feed_downgrade_uses_known_official_build(self):
         self.meta['version'] = '109.0.0.2.108'
@@ -135,6 +146,15 @@ class DownloadTests(unittest.TestCase):
             p = Path(t) / 'upstream.dmg'
             p.write_bytes(b'good')
             upstream.download({'size': 4, 'dmg_sha256': hashlib.sha256(b'good').hexdigest()}, p)
+
+    def test_download_does_not_delete_another_partial_file(self):
+        with tempfile.TemporaryDirectory() as t, patch('upstream.open_official', side_effect=AssertionError('network used')):
+            p = Path(t) / 'upstream.dmg'
+            partial = p.with_suffix('.partial')
+            partial.write_bytes(b'another running download')
+            with self.assertRaises(FileExistsError):
+                upstream.download({}, p)
+            self.assertEqual(partial.read_bytes(), b'another running download')
 
     def test_update_archive_cannot_escape(self):
         with tempfile.TemporaryDirectory() as t:

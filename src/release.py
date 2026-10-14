@@ -10,6 +10,7 @@ import zipfile
 from pathlib import Path
 
 from upstream import ROOT, latest_metadata, manifests, select_manifest, tag_for, version_tuple
+from update import tag_tuple
 
 
 def gh(*args):
@@ -20,7 +21,17 @@ def release_exists(repository, tag):
     # List releases instead of treating every failed lookup (including outages or
     # bad credentials) as "not found". A failed API request stops before download.
     releases = json.loads(gh('api', '--paginate', '--slurp', f'repos/{repository}/releases?per_page=100'))
-    return any(item['tag_name'] == tag for page in releases for item in page)
+    for page in releases:
+        for item in page:
+            if item['tag_name'] == tag:
+                return True
+            if not item['draft'] and not item['prerelease']:
+                try:
+                    if tag_tuple(item['tag_name']) > tag_tuple(tag):
+                        return True
+                except ValueError:
+                    pass # Ignore unrelated release tags, not API failures.
+    return False
 
 
 def make_plan(metadata, known, repository, exists=release_exists):
@@ -29,7 +40,7 @@ def make_plan(metadata, known, repository, exists=release_exists):
     duplicate = exists(repository, tag)
     return {'tag': tag, 'version': manifest['version'], 'feed_version': metadata['version'],
             'needs_build': not duplicate,
-            'reason': 'Release already exists; no DMG download.' if duplicate else 'New reviewed release; build required.',
+            'reason': 'This or a newer release already exists; no DMG download.' if duplicate else 'New reviewed release; build required.',
             'feed_behind': version_tuple(metadata['version']) < version_tuple(manifest['version'])}
 
 
