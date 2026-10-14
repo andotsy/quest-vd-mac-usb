@@ -1,0 +1,70 @@
+name: Check Meta and release installer
+
+on:
+  schedule:
+    - cron: '23 8 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'manifests/**'
+      - 'Install.command'
+      - 'Update.command'
+      - '.github/workflows/release.yml'
+
+concurrency:
+  group: release-installer
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      needs_build: ${{ steps.plan.outputs.needs_build }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Test patch guards and release decisions
+        run: python3 -m unittest discover -s tests -v
+      - name: Read small metadata and compare releases before downloading
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: python3 src/release.py plan --repository "$REPOSITORY"
+
+  build:
+    needs: check
+    if: needs.check.outputs.needs_build == 'true'
+    runs-on: macos-15
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      META_VERSION: ${{ needs.check.outputs.version }}
+      RELEASE_TAG: ${{ needs.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build and verify locally on the runner
+        run: python3 src/quest_usb.py --version "$META_VERSION" --output "$RUNNER_TEMP/private-build"
+      - name: Package project source only
+        run: >-
+          python3 src/release.py package --version "$META_VERSION"
+          --report "$RUNNER_TEMP/private-build/verification.json"
+          --repository "$REPOSITORY" --output dist
+      - name: Publish versioned installer kit
+        run: |
+          gh release create "$RELEASE_TAG" --repo "$REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Meta Quest Virtual Display USB · $RELEASE_TAG" \
+            --notes-file dist/release-notes.md \
+            dist/quest-vd-mac-usb-*.zip dist/SHA256SUMS dist/manifest.json dist/verification.json
+      - name: Remove ephemeral Meta binaries
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/private-build"

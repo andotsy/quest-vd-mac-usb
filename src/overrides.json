@@ -1,0 +1,7 @@
+{
+  "remote_desktop_mqrd_default:mqrd_enable_disco_server": {"type": "boolean", "value": "true"},
+  "oculus_remote_desktop:usb_transport_enabled": {"type": "boolean", "value": "true"},
+  "remote_desktop_mqrd_default:showing_capture_fps_interval": {"type": "int64", "value": "1000"},
+  "remote_desktop_mqrd_default:frl_mqrd_capture_fps_report_interval": {"type": "int64", "value": "1000"},
+  "remote_desktop_mqrd_default:mqrd_sending_fps_report_interval": {"type": "int64", "value": "1000"}
+}

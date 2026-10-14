@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+<title id="title">Meta Quest Virtual Display USB</title><desc id="desc">A Mac and a floating desktop connected by one luminous cable. Independent community patch for Apple Silicon.</desc>
+<defs>
+ <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0c1422"/><stop offset="1" stop-color="#17172d"/></linearGradient>
+ <radialGradient id="glow"><stop stop-color="#0cae9e" stop-opacity=".25"/><stop offset="1" stop-color="#0cae9e" stop-opacity="0"/></radialGradient>
+ <linearGradient id="wire"><stop stop-color="#72f5cf"/><stop offset="1" stop-color="#829dff"/></linearGradient>
+ <linearGradient id="glass" x2="1" y2="1"><stop stop-color="#2b3c50"/><stop offset="1" stop-color="#172436"/></linearGradient>
+ <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#b6cee8" stroke-opacity=".035"/></pattern>
+</defs>
+<rect width="1280" height="640" rx="24" fill="url(#bg)"/>
+<rect width="1280" height="640" rx="24" fill="url(#grid)"/>
+<ellipse cx="960" cy="260" rx="420" ry="330" fill="url(#glow)"/>
+<g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+ <rect x="68" y="64" width="199" height="30" rx="15" fill="#16362f" stroke="#386b5d"/>
+ <circle cx="85" cy="79" r="4" fill="#83f5c8"/><text x="99" y="84" font-size="11" font-weight="600" letter-spacing="1.5" fill="#b8f7dd">COMMUNITY PATCH</text>
+ <text x="64" y="165" font-size="29" font-weight="500" fill="#b6c4d7">Meta Quest Virtual Display</text>
+ <text x="60" y="265" font-size="104" font-weight="750" letter-spacing="-5" fill="#f0f7ff">Go wired.</text>
+ <text x="67" y="317" font-size="23" fill="#b9c7da">Your Mac. One cable. More space.</text>
+ <text x="68" y="378" font-size="16" fill="#8498af">The familiar desktop window, connected over USB.</text>
+ <text x="68" y="405" font-size="16" fill="#8498af">Built locally from Meta’s official Mac app.</text>
+ <g transform="translate(68 478)">
+  <rect width="130" height="36" rx="9" fill="#1c2a3c" stroke="#34455b"/><text x="65" y="23" text-anchor="middle" font-size="13" fill="#d4e0ee">Apple Silicon</text>
+  <rect x="143" width="109" height="36" rx="9" fill="#1c2a3c" stroke="#34455b"/><text x="197" y="23" text-anchor="middle" font-size="13" fill="#d4e0ee">Native USB</text>
+  <rect x="265" width="107" height="36" rx="9" fill="#1c2a3c" stroke="#34455b"/><text x="318" y="23" text-anchor="middle" font-size="13" fill="#d4e0ee">No adb</text>
+ </g>
+ <g transform="translate(748 135) rotate(-7 180 120)">
+  <rect x="-9" y="-9" width="378" height="242" rx="21" fill="#72f5cf" opacity=".04"/>
+  <rect width="360" height="224" rx="14" fill="url(#glass)" stroke="#6c9caa" stroke-opacity=".8"/>
+  <path d="M0 35H360" stroke="#627d90" stroke-opacity=".4"/><circle cx="18" cy="18" r="4" fill="#7af0cf"/><circle cx="33" cy="18" r="4" fill="#668d9e"/><circle cx="48" cy="18" r="4" fill="#668d9e"/>
+  <rect x="18" y="54" width="94" height="152" rx="7" fill="#102130"/>
+  <path d="M32 75H81M32 96H95M32 117H75" stroke="#456278" stroke-width="5" stroke-linecap="round"/>
+  <rect x="128" y="54" width="214" height="93" rx="7" fill="#224749"/><path d="M146 123L182 95L212 110L257 75L280 92L325 67" fill="none" stroke="#85eacb" stroke-width="3"/>
+  <rect x="128" y="162" width="99" height="44" rx="7" fill="#313a59"/><rect x="242" y="162" width="100" height="44" rx="7" fill="#213c50"/>
+ </g>
+ <path d="M1054 356C1165 390 1164 468 1055 472C954 476 1022 527 889 514" fill="none" stroke="url(#wire)" stroke-width="4" stroke-linecap="round"/>
+ <g transform="translate(681 413)">
+  <rect x="26" width="201" height="123" rx="9" fill="#0c1423" stroke="#63778e" stroke-width="2"/>
+  <rect x="34" y="9" width="185" height="106" rx="3" fill="url(#glass)"/>
+  <rect x="46" y="21" width="161" height="82" rx="4" fill="#172f3e"/>
+  <path d="M0 124H253L234 139H18Z" fill="#6a7b90"/><path d="M99 124H153L149 129H103Z" fill="#3b4a5b"/>
+ </g>
+ <text x="68" y="588" font-size="12" letter-spacing="1" fill="#62768e">QUEST-VD-MAC-USB</text>
+ <text x="1212" y="588" text-anchor="end" font-size="12" fill="#7a8ca4">Independent project · Not affiliated with Meta</text>
+</g></svg>

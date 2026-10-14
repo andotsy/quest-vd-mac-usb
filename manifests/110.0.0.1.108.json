@@ -1,0 +1,13 @@
+{
+  "version": "110.0.0.1.108",
+  "patch_revision": 1,
+  "url": "https://securecdn-iev1-1.oculus.com/binaries/download/?id=28670799292582235",
+  "size": 53540940,
+  "dmg_sha256": "eedcc0c2db92a0ceff4391904689135ef20ead4622ebd865a865ce002702abad",
+  "executable_sha256": "890156c58c2b1aeaac69243990340dbe7b93fbb5ada459563ff346fa759683ca",
+  "patches": [
+    {"address": "0x100c1cd74", "before": "80078052", "after": "000f8052", "purpose": "USB capture target: 120 FPS"},
+    {"address": "0x10239fde0", "before": "93078052", "after": "130f8052", "purpose": "Virtual display modes: 120 Hz"},
+    {"address": "0x1021032b4", "before": "a81240b9", "after": "080f8052", "purpose": "VideoToolbox expected frame rate: 120 FPS"}
+  ]
+}

@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.DS_Store
+build/
+dist/
+plan.json
+*.app/
+*.app.backup/
+*.dmg
+*.apk
+*.dylib
+*.p12
+*.pem
+*.key
+*.keychain*
