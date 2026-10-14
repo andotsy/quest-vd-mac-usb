@@ -1,6 +1,6 @@
 # Install
 
-Download your **Build DMG** artifact, unzip it, open the DMG, and run **Install.command**. It copies the app into Applications, signs it locally, and saves your previous copy in **Quest VD USB Backups**.
+Download and open your **Build DMG** artifact, and run **Install.command**. It copies the app into Applications, signs it locally, and saves your previous copy in **Quest VD USB Backups**.
 
 Open **Meta Quest Virtual Display**. Allow Accessibility and Screen Recording; restart when asked. Connect your Quest and choose the Mac’s USB entry.
 

@@ -13,6 +13,12 @@ BACKUP=''
 COMMITTED=false
 
 fail() { printf '%s\n' "$*" >&2; exit 1; }
+quiet() {
+    local detail
+    if detail="$("$@" 2>&1)"; then return 0; fi
+    printf '%s\n' "$detail" >&2
+    return 1
+}
 cleanup() {
     status=$?
     if [[ "$COMMITTED" == false && -n "$BACKUP" && ! -e "$DESTINATION" ]]; then
@@ -38,8 +44,8 @@ done
 [[ "$DESTINATION" == /* && "${DESTINATION##*/}" == "$APP" ]] || fail "Choose an absolute path ending in $APP."
 [[ ! -L "$DESTINATION" ]] || fail 'The destination is a symlink. Choose a regular folder.'
 (cd "$HERE" && shasum -a 256 -c Support/SHA256SUMS >/dev/null)
-codesign --verify --deep --strict "$SOURCE"
-codesign --verify --strict "$HERE/Support/prepare-install"
+quiet codesign --verify --deep --strict "$SOURCE"
+quiet codesign --verify --strict "$HERE/Support/prepare-install"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$SOURCE/Contents/Info.plist")" == io.github.quest-vd-mac-usb ]] || fail 'Unexpected app identity.'
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$SOURCE/Contents/Info.plist")"
 if [[ "$CHECK" == true ]]; then
@@ -54,8 +60,8 @@ mkdir -p -- "$PARENT"
 STAGING="$(mktemp -d "$PARENT/.quest-vd-usb.XXXXXXXX")"
 printf 'Installing Meta Quest Virtual Display…\n'
 ditto "$SOURCE" "$STAGING/$APP"
-codesign --force --deep --sign "$IDENTITY" "$STAGING/$APP"
-codesign --verify --deep --strict "$STAGING/$APP"
+quiet codesign --force --deep --sign "$IDENTITY" "$STAGING/$APP"
+quiet codesign --verify --deep --strict "$STAGING/$APP"
 "$HERE/Support/prepare-install" --quit
 # Recheck after staging in case another installer changed the destination.
 [[ ! -L "$DESTINATION" ]] || fail 'The destination changed. Run the installer again.'

@@ -12,7 +12,7 @@ Tested on **M4 + Quest 3**. Delivered 120 Hz isn’t verified. [Measurements →
 
 1. **[Fork this repo](https://github.com/andotsy/quest-vd-mac-usb/fork).** Enable Actions in your fork.
 2. Run **Actions → Build DMG**, with the default options.
-3. Download the run’s artifact, unzip it, and open the **DMG**.
+3. Download and open the run’s **DMG** artifact.
 4. Run **Install.command**, then open **Meta Quest Virtual Display** from Applications.
 
 Allow Accessibility and Screen Recording, restart when asked, and connect your Quest with a USB data cable.

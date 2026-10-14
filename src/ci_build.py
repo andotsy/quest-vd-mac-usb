@@ -51,7 +51,7 @@ def artifact_name(manifest, root=ROOT):
     for path in sorted(paths):
         if path.is_file():
             digest.update(str(path.relative_to(root)).encode() + b'\0' + path.read_bytes() + b'\0')
-    return f'quest-vd-mac-usb-{tag_for(manifest)}-{digest.hexdigest()[:16]}'
+    return f'Quest-VD-USB-{tag_for(manifest)}-{digest.hexdigest()[:12]}.dmg'
 
 
 def existing_artifact(repository, name, now=None):
@@ -133,7 +133,7 @@ def main():
         reviewed = choose_manifest(manifests(), dmg_url=m['url'])
         if reviewed != m or artifact_name(m) != p['artifact_name']:
             raise ValueError('Build inputs changed. Run the plan step again.')
-        dmg = build_dmg(m, args.output, args.dmg, args.verify_install)
+        dmg = build_dmg(m, args.output, args.dmg, args.verify_install, artifact_filename=p['artifact_name'])
         output('dmg', dmg)
 
 

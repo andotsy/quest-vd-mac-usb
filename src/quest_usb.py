@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Build the app and its self-contained installation DMG on a Mac runner."""
 import json
-import os
 import plistlib
 import subprocess
 import tempfile
@@ -58,7 +57,7 @@ def build(source, target, manifest, identity='-'):
             'performance': 'Requests 120 FPS; does not establish delivered FPS or headset refresh rate.'}
 
 
-def build_dmg(manifest, output, source_dmg=None, verify_install=False):
+def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_filename=None):
     output = output.expanduser().absolute()
     if output.exists():
         raise ValueError('Choose a fresh build directory.')
@@ -91,7 +90,10 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False):
     (support / 'SHA256SUMS').write_text(''.join(f'{sha256(p)}  {p.relative_to(stage)}\n' for p in checked))
     dist = output / 'dist'
     dist.mkdir()
-    result = dist / (tag_for(manifest) + '.dmg')
+    filename = artifact_filename or (tag_for(manifest) + '.dmg')
+    if Path(filename).name != filename or not filename.endswith('.dmg'):
+        raise ValueError('Invalid artifact filename')
+    result = dist / filename
     run('/usr/bin/hdiutil', 'create', '-srcfolder', stage, '-volname', 'Quest Virtual Display USB',
         '-format', 'UDZO', result, stdout=subprocess.DEVNULL)
     run('/usr/bin/hdiutil', 'verify', result, stdout=subprocess.DEVNULL)
