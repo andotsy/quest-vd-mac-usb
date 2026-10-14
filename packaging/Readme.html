@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Set up Meta Quest Virtual Display</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #f7f6fb; --card: #fff; --ink: #272335; --muted: #686276; --line: #e8e4ef; --accent: #6540b4; --tint: #eee7fb; --code: #211c2e; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width: 880px; margin: 0 auto; padding: 56px 28px 36px; }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 650; letter-spacing: -.02em; }
+    .mark { width: 42px; height: 42px; padding: 10px; border-radius: 12px; background: #e2d3fc; color: #62408e; }
+    .offline { margin-left: auto; color: var(--muted); font-size: 13px; font-weight: 450; letter-spacing: 0; }
+    header { padding: 44px 0 30px; }
+    .eyebrow { margin: 0 0 12px; color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(32px, 5vw, 46px); line-height: 1.15; font-weight: 720; letter-spacing: -.045em; }
+    .intro { margin: 16px 0 0; color: var(--muted); font-size: 18px; }
+    .install { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; background: var(--card); }
+    .step { padding: 26px 28px; }
+    .step + .step { border-left: 1px solid var(--line); }
+    .number { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--tint); color: var(--accent); font-size: 13px; font-weight: 700; }
+    h2 { margin: 0; font-size: 24px; line-height: 1.3; letter-spacing: -.025em; }
+    h3 { margin: 12px 0 6px; font-size: 17px; letter-spacing: -.015em; }
+    p { margin: 10px 0; }
+    .step p { margin: 0; color: var(--muted); font-size: 15px; }
+    .requirements { margin: 14px 4px 32px; color: var(--muted); font-size: 13px; }
+    .repair { padding: 30px; border: 1px solid var(--line); border-radius: 20px; background: var(--card); }
+    .repair > p { color: var(--muted); }
+    ol { padding-left: 23px; margin: 20px 0; }
+    li { padding-left: 4px; margin: 8px 0; }
+    li::marker { color: var(--accent); font-weight: 650; }
+    .command { margin-top: 22px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 16px; background: var(--bg); }
+    .language { margin-right: auto; color: var(--muted); font-size: 13px; }
+    button { border: 0; border-radius: 8px; padding: 10px 15px; font: inherit; font-size: 14px; font-weight: 600; background: var(--accent); color: #fff; cursor: pointer; }
+    button:hover { filter: brightness(1.1); }
+    button:focus-visible, summary:focus-visible { outline: 3px solid #ac86ef; outline-offset: 3px; }
+    summary { padding: 12px 16px; color: var(--muted); cursor: pointer; font-size: 13px; }
+    pre { margin: 0; padding: 20px; overflow-x: auto; background: var(--code); color: #eee8f7; font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 4; }
+    code { font-family: inherit; }
+    #copy-status { min-height: 22px; margin: 8px 0 0; color: var(--accent); font-size: 13px; }
+    .scope { padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; }
+    .scope strong { color: var(--ink); }
+    footer { padding: 24px 4px 0; color: var(--muted); font-size: 13px; }
+    footer p { margin: 4px 0; }
+    .path { overflow-wrap: anywhere; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #17151d; --card: #211e29; --ink: #f0ebf7; --muted: #b4abbe; --line: #383140; --accent: #bca0f1; --tint: #392d4f; --code: #141119; }
+      button { background: #cdb4fa; color: #2c1b46; }
+    }
+    @media (max-width: 560px) {
+      main { padding: 28px 18px; }
+      .offline { display: none; }
+      header { padding-top: 32px; }
+      .install { grid-template-columns: 1fr; }
+      .step { padding: 22px; }
+      .step + .step { border-left: 0; border-top: 1px solid var(--line); }
+      .repair { padding: 22px; }
+      h2 { font-size: 22px; }
+    }
+    @media print { body { background: white; color: black; } main { max-width: none; padding: 0; } button, .offline, #copy-status { display: none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="5"/><path d="M6 10h3m6 0h3M9 18l3-3 3 3"/></svg>
+      <span>Quest Virtual Display USB</span><span class="offline">Offline guide</span>
+    </div>
+    <header>
+      <p class="eyebrow">Welcome / Getting started</p>
+      <h1>Set up Quest VD USB.</h1>
+      <p class="intro">Connect your Quest to your Mac over USB.</p>
+    </header>
+    <section class="install" aria-label="Installation">
+      <div class="step"><span class="number" aria-hidden="true">1</span><h3>Move to Applications</h3><p>Drag <strong>Meta Quest Virtual Display.app</strong> onto the <strong>Applications</strong> shortcut in the disk image.</p></div>
+      <div class="step"><span class="number" aria-hidden="true">2</span><h3>Finish setup and connect</h3><p>Finish the setup below, then open the installed app. Allow <strong>Accessibility</strong> and <strong>Screen Recording</strong>, and restart the app when asked.</p></div>
+    </section>
+    <p class="requirements">Apple silicon · macOS 13.3 or later · Quest Virtual Display client · USB data cable</p>
+    <section class="repair" aria-labelledby="repair-title">
+      <h2 id="repair-title">Finish setup in Terminal</h2>
+      <p>Use this command to sign your installed copy locally and remove its download quarantine before opening it. This build is ad-hoc signed, not notarized.</p>
+      <ol>
+        <li>Copy the app to <strong>Applications</strong> first, then quit it if it’s running.</li>
+        <li>Open the <strong>Terminal</strong> shortcut in the disk image, or find Terminal in Applications → Utilities.</li>
+        <li>Click <strong>Copy command</strong>, paste into Terminal with <strong>⌘V</strong>, and press <strong>Return</strong>.</li>
+        <li>Wait for “Ready,” then open <strong>Meta Quest Virtual Display</strong> from Applications.</li>
+      </ol>
+      <div class="command">
+        <div class="toolbar"><span class="language">Terminal · zsh</span><button id="copy-command" type="button" hidden>Copy command</button></div>
+        <details id="command-details"><summary>View the command</summary><pre tabindex="0" aria-label="Repair command"><code id="repair-command">(
+  set -eu
+  quest_app="/Applications/Meta Quest Virtual Display.app"
+  if [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$quest_app/Contents/Info.plist")" != "io.github.quest-vd-mac-usb" ]; then
+    echo "Copy the app from this DMG to Applications first."
+    exit 1
+  fi
+  /usr/bin/codesign --verify --deep --strict "$quest_app"
+  /usr/bin/codesign --force --deep --sign - "$quest_app"
+  /usr/bin/codesign --verify --deep --strict "$quest_app"
+  /usr/bin/xattr -dr com.apple.quarantine "$quest_app"
+  echo "Ready. Open Meta Quest Virtual Display from Applications."
+)</code></pre></details>
+      </div>
+      <p id="copy-status" role="status" aria-live="polite">You can also expand the command and select it to copy manually.</p>
+      <noscript><p>JavaScript is off. Expand “View the command” and copy the entire block, including the first and last lines.</p></noscript>
+      <p class="scope"><strong>What it does.</strong> Removes quarantine and self-signs only the installed Meta Quest Virtual Display app. It checks the app’s identity and existing signature first and leaves global macOS security settings unchanged.</p>
+    </section>
+    <footer><p>All set? Eject the disk image. Your installed app stays in Applications.</p><p>Connect your Quest with a USB data cable and choose your Mac’s USB entry. For updates, sync your fork and run Build DMG again.</p></footer>
+  </main>
+  <script>
+    (() => {
+      const button = document.getElementById('copy-command');
+      const code = document.getElementById('repair-command');
+      const details = document.getElementById('command-details');
+      const status = document.getElementById('copy-status');
+      button.hidden = false;
+
+      // Local files do not consistently have Clipboard API permission.
+      // Keep the fallback synchronous with the user's click for Safari.
+      function copyLocal(text) {
+        const field = document.createElement('textarea');
+        field.value = text;
+        field.readOnly = true;
+        field.style.cssText = 'position:fixed;top:0;left:-9999px;font-size:16px';
+        document.body.appendChild(field);
+        field.select();
+        field.setSelectionRange(0, text.length);
+        try { return document.execCommand('copy'); }
+        catch (_) { return false; }
+        finally { field.remove(); button.focus({ preventScroll: true }); }
+      }
+
+      button.addEventListener('click', async () => {
+        const text = code.textContent.trim() + '\n';
+        let copied = copyLocal(text);
+        if (!copied && navigator.clipboard && navigator.clipboard.writeText) {
+          try { await navigator.clipboard.writeText(text); copied = true; }
+          catch (_) { /* Show an honest manual-copy fallback below. */ }
+        }
+        if (copied) {
+          button.textContent = 'Copied ✓';
+          status.textContent = 'Copied. Paste into Terminal with ⌘V, then press Return.';
+        } else {
+          details.open = true;
+          const range = document.createRange();
+          range.selectNodeContents(code);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          button.textContent = 'Copy command';
+          status.textContent = 'Automatic copy was blocked. The command is selected — press ⌘C to copy it.';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

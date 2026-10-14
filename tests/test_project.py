@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 import patching
 import ci_build
 import upstream
+import quest_usb
 
 
 def synthetic_binary():
@@ -85,7 +86,7 @@ class PlanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             root = Path(t)
             (root / 'packaging').mkdir()
-            script = root / 'packaging/Readme.txt'
+            script = root / 'packaging/Readme.html'
             script.write_text('first')
             before = ci_build.artifact_name(self.m, root)
             script.write_text('second')
@@ -143,6 +144,18 @@ class PlanTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ci_build.make_plan('someone/fork', self.known, dmg_url=url,
                                   lookup=lambda *a: self.fail('lookup too early'))
+
+
+class ReadmeTests(unittest.TestCase):
+    def test_command_decodes_shell_characters_without_page_javascript(self):
+        html = '<code id="repair-command">test 1 &lt; 2 &amp;&amp; echo "ready"</code><script>copy()</script>'
+        self.assertEqual(quest_usb.readme_command(html), 'test 1 < 2 && echo "ready"')
+
+    def test_missing_empty_or_duplicate_commands_are_rejected(self):
+        for html in ('<p>No command</p>', '<code id="repair-command"></code>',
+                     '<code id="repair-command">one</code><code id="repair-command">two</code>'):
+            with self.assertRaises(ValueError):
+                quest_usb.readme_command(html)
 
 
 class DownloadTests(unittest.TestCase):

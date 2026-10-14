@@ -5,6 +5,7 @@ import plistlib
 import shlex
 import subprocess
 import tempfile
+from html.parser import HTMLParser
 from pathlib import Path
 
 from patching import patch_executable
@@ -79,8 +80,8 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
             report = build(Path(mount) / target.name, target, manifest)
         finally:
             run('/usr/bin/hdiutil', 'detach', mount, stdout=subprocess.DEVNULL)
-    readme = stage / 'Readme.txt'
-    run('/usr/bin/ditto', ROOT / 'packaging/Readme.txt', readme)
+    readme = stage / 'Readme.html'
+    run('/usr/bin/ditto', ROOT / 'packaging/Readme.html', readme)
     readme.chmod(0o644)
     (output / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')
     dist = output / 'dist'
@@ -94,11 +95,12 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
         background, manifest['version'])
     dmgbuild.build_dmg(str(result), 'Quest Virtual Display USB', settings={
         'format': 'UDZO', 'files': [str(target), str(readme)],
-        'symlinks': {'Applications': '/Applications'},
+        'symlinks': {'Applications': '/Applications', 'Terminal': '/System/Applications/Utilities/Terminal.app'},
         # Leave room for Finder's optional tab and status bars.
         'background': str(background.with_suffix('.png')), 'window_rect': ((160, 180), (760, 600)),
-        'icon_locations': {target.name: (190, 214), 'Applications': (570, 214), 'Readme.txt': (380, 402)},
-        'hide_extensions': ['Readme.txt'],
+        'icon_locations': {target.name: (190, 214), 'Applications': (570, 214),
+                           'Readme.html': (270, 402), 'Terminal': (490, 402)},
+        'hide_extensions': [],
         'default_view': 'icon-view', 'icon_size': 88, 'text_size': 13,
         'include_icon_view_settings': True, 'include_list_view_settings': False,
         'arrange_by': None, 'grid_spacing': 90, 'scroll_position': (0, 0), 'label_pos': 'bottom',
@@ -111,14 +113,19 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
         try:
             mounted = Path(mount)
             visible = {p.name for p in mounted.iterdir() if not p.name.startswith('.')}
-            if visible != {target.name, 'Applications', 'Readme.txt'}:
+            if visible != {target.name, 'Applications', 'Readme.html', 'Terminal'}:
                 raise ValueError('Unexpected visible DMG contents: ' + repr(visible))
             if not (mounted / 'Applications').is_symlink() or (mounted / 'Applications').readlink() != Path('/Applications'):
                 raise ValueError('Applications shortcut is missing or incorrect')
+            terminal = mounted / 'Terminal'
+            if not terminal.is_symlink() or terminal.readlink() != Path('/System/Applications/Utilities/Terminal.app'):
+                raise ValueError('Terminal shortcut is missing or incorrect')
             if not (mounted / '.DS_Store').is_file() or not (mounted / '.background.tiff').is_file():
                 raise ValueError('Finder layout or arrow background is missing')
-            if (mounted / 'Readme.txt').stat().st_mode & 0o111:
-                raise ValueError('Readme must be plain text, not executable')
+            if (mounted / 'Readme.html').stat().st_mode & 0o111:
+                raise ValueError('Readme must be an HTML document, not executable')
+            if (mounted / 'Readme.html').read_bytes() != readme.read_bytes():
+                raise ValueError('Packaged HTML guide does not match the source')
             run('/usr/bin/codesign', '--verify', '--deep', '--strict', mounted / target.name)
             if verify_install:
                 check_install(mounted)
@@ -128,12 +135,39 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
     return result
 
 
+def readme_command(html):
+    """Extract the same decoded command the guide copies, not HTML source text."""
+    class Command(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.inside = False
+            self.parts = []
+            self.blocks = 0
+
+        def handle_starttag(self, tag, attrs):
+            if tag == 'code' and dict(attrs).get('id') == 'repair-command':
+                self.inside = True
+                self.blocks += 1
+
+        def handle_endtag(self, tag):
+            if tag == 'code':
+                self.inside = False
+
+        def handle_data(self, data):
+            if self.inside:
+                self.parts.append(data)
+
+    parser = Command()
+    parser.feed(html)
+    command = ''.join(parser.parts).strip()
+    if parser.blocks != 1 or not command:
+        raise ValueError('Expected exactly one nonempty Readme command')
+    return command
+
+
 def check_install(mounted):
     """Test a drag-copy and the actual Readme commands without touching /Applications."""
-    readme = (mounted / 'Readme.txt').read_text()
-    start = readme.index('\n(\n') + 1
-    end = readme.index('\n)\n', start) + 2
-    script = readme[start:end]
+    script = readme_command((mounted / 'Readme.html').read_text())
     assignment = 'quest_app="/Applications/' + APP_NAME + '.app"'
     if script.count(assignment) != 1:
         raise ValueError('Cannot locate the Readme destination for isolated testing')

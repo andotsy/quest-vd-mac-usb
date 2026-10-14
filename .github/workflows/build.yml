@@ -66,7 +66,7 @@ jobs:
           ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
         run: |
           echo "[Download your DMG]($ARTIFACT_URL) · available for 7 days." >> "$GITHUB_STEP_SUMMARY"
-          echo 'Drag the app to **Applications**, then follow **Readme** inside the DMG.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Drag the app to **Applications**, then open **Readme.html** inside the DMG and click **Copy command**. Paste into the **Terminal** shortcut.' >> "$GITHUB_STEP_SUMMARY"
       - name: Clean up
         if: always()
         run: rm -rf "$RUNNER_TEMP/quest-vd-build" "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/dmg-tools"

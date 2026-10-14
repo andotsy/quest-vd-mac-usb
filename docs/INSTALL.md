@@ -2,10 +2,12 @@
 
 1. Download and open your **Build DMG** artifact.
 2. Quit Meta Quest Virtual Display, then drag the app to **Applications**.
-3. Open **Readme** in the DMG. Paste its command block into Terminal.
+3. Open **Readme.html** in the DMG and click **Copy command**. Open the **Terminal** shortcut, paste with **⌘V**, and press **Return**.
 4. Open **Meta Quest Virtual Display** from Applications.
 
 Allow Accessibility and Screen Recording, then restart when asked. Connect your Quest with a USB data cable and choose your Mac’s USB entry.
+
+The guide works offline with built-in styling and a copy button. If clipboard access is blocked, it selects the command for manual copying.
 
 The commands use built-in macOS tools to sign the installed app and remove its download quarantine. No installer executable, Xcode, or extra tools. [Signing](SIGNING.md)
 

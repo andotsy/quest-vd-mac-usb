@@ -13,7 +13,7 @@ Tested on **M4 Pro + Quest 3**. Delivered 120 Hz isn’t verified. [Measurements
 1. **[Fork this repo](https://github.com/andotsy/quest-vd-mac-usb/fork).** Enable Actions in your fork.
 2. Run **Actions → Build DMG**, with the default options.
 3. Download and open the run’s **DMG** artifact.
-4. Drag the app to **Applications**. Open **Readme** in the DMG and paste its signing commands into Terminal.
+4. Drag the app to **Applications**. Open **Readme.html** in the DMG, click **Copy command**, then paste into the included **Terminal** shortcut and press Return.
 
 Allow Accessibility and Screen Recording, restart when asked, and connect your Quest with a USB data cable.
 
