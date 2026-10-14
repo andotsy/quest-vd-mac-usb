@@ -6,7 +6,7 @@
 
 A patch for Meta’s official Mac app: **USB streaming**, with a **120 FPS target**.
 
-Tested on **M4 + Quest 3**. Delivered 120 Hz isn’t verified. [Measurements →](docs/PERFORMANCE.md)
+Tested on **M4 Pro + Quest 3**. Delivered 120 Hz isn’t verified. [Measurements →](docs/PERFORMANCE.md)
 
 ## Get it
 
