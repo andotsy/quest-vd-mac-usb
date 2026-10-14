@@ -1,6 +1,6 @@
 # Build details
 
-**Build DMG** runs manually in your fork or private copy, on a macOS ARM runner. No Releases are created.
+**Build DMG** runs manually in the repository where you start it, on a macOS ARM runner. No Releases are created.
 
 1. Read Meta’s small version feed.
 2. Match a reviewed manifest and look for a successful, unexpired artifact.

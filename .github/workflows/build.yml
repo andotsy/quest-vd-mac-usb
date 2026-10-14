@@ -21,14 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  fork:
-    if: github.repository == 'andotsy/quest-vd-mac-usb'
-    runs-on: ubuntu-24.04
-    steps:
-      - run: echo 'Fork this repository, then run **Build DMG** in your fork.' >> "$GITHUB_STEP_SUMMARY"
-
   build:
-    if: github.repository != 'andotsy/quest-vd-mac-usb'
     runs-on: macos-15
     timeout-minutes: 20
     steps:
