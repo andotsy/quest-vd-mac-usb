@@ -23,7 +23,7 @@ concurrency:
 jobs:
   fork:
     if: github.repository == 'andotsy/quest-vd-mac-usb'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - run: echo 'Fork this repository, then run **Build DMG** in your fork.' >> "$GITHUB_STEP_SUMMARY"
 
