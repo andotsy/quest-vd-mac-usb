@@ -2,6 +2,7 @@
 """Build the app and its self-contained installation DMG on a Mac runner."""
 import json
 import plistlib
+import shlex
 import subprocess
 import tempfile
 from pathlib import Path
@@ -38,6 +39,10 @@ def build(source, target, manifest, identity='-'):
     for key in ('frl_mqrd_silent_update_enabled', 'frl_mqrd_silent_update_phase_2'):
         overrides['remote_desktop_mqrd_default:' + key] = {'type': 'boolean', 'value': 'false'}
     (target / 'Contents/Resources/usb-overrides.json').write_text(json.dumps(overrides, indent=2) + '\n')
+    for name in ('LICENSE', 'NOTICE.md'):
+        run('/usr/bin/ditto', ROOT / name, target / 'Contents/Resources' / ('QuestVDUSB-' + name))
+    run('/usr/bin/ditto', ROOT / 'packaging/dmgbuild-LICENSE.txt',
+        target / 'Contents/Resources/QuestVDUSB-DMG-Background-LICENSE.txt')
     library = target / 'Contents/MacOS/libQuestVDUSB.dylib'
     run('/usr/bin/xcrun', 'clang', '-arch', 'arm64', '-mmacosx-version-min=13.3', '-dynamiclib', '-O2',
         '-Wall', '-Wextra', '-Werror', ROOT / 'src/USBConfig.c', '-o', library,
@@ -58,6 +63,8 @@ def build(source, target, manifest, identity='-'):
 
 
 def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_filename=None):
+    import dmgbuild
+
     output = output.expanduser().absolute()
     if output.exists():
         raise ValueError('Choose a fresh build directory.')
@@ -66,8 +73,7 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
     if dmg.stat().st_size != manifest['size'] or sha256(dmg) != manifest['dmg_sha256']:
         raise ValueError('DMG checksum/size mismatch')
     stage = output / 'image'
-    support = stage / 'Support'
-    support.mkdir(parents=True)
+    stage.mkdir()
     target = stage / (APP_NAME + '.app')
     with tempfile.TemporaryDirectory(prefix='quest-vd-source-') as mount:
         run('/usr/bin/hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mount, dmg, stdout=subprocess.DEVNULL)
@@ -75,60 +81,79 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
             report = build(Path(mount) / target.name, target, manifest)
         finally:
             run('/usr/bin/hdiutil', 'detach', mount, stdout=subprocess.DEVNULL)
-    helper = support / 'prepare-install'
-    run('/usr/bin/xcrun', 'clang', '-arch', 'arm64', '-mmacosx-version-min=13.3', '-fobjc-arc',
-        '-Wall', '-Wextra', '-Werror', '-framework', 'AppKit', ROOT / 'src/quit-hosts.m', '-o', helper)
-    run('/usr/bin/codesign', '--force', '--sign', '-', helper)
-    for name in ('Install.command', 'Read Me.txt'):
-        run('/usr/bin/ditto', ROOT / 'packaging' / name, stage / name)
-    (stage / 'Install.command').chmod(0o755)
-    for name in ('NOTICE.md', 'LICENSE'):
-        run('/usr/bin/ditto', ROOT / name, support / name)
-    (support / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')
-    # codesign covers the complete app. These hashes cover the installer and support files.
-    checked = [stage / 'Install.command', stage / 'Read Me.txt', *sorted(support.iterdir())]
-    (support / 'SHA256SUMS').write_text(''.join(f'{sha256(p)}  {p.relative_to(stage)}\n' for p in checked))
+    readme = stage / 'Readme.txt'
+    run('/usr/bin/ditto', ROOT / 'packaging/Readme.txt', readme)
+    readme.chmod(0o644)
+    (output / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')
     dist = output / 'dist'
     dist.mkdir()
     filename = artifact_filename or (tag_for(manifest) + '.dmg')
     if Path(filename).name != filename or not filename.endswith('.dmg'):
         raise ValueError('Invalid artifact filename')
     result = dist / filename
-    run('/usr/bin/hdiutil', 'create', '-srcfolder', stage, '-volname', 'Quest Virtual Display USB',
-        '-format', 'UDZO', result, stdout=subprocess.DEVNULL)
+    dmgbuild.build_dmg(str(result), 'Quest Virtual Display USB', settings={
+        'format': 'UDZO', 'files': [str(target), str(readme)],
+        'symlinks': {'Applications': '/Applications'},
+        'background': 'builtin-arrow', 'window_rect': ((180, 180), (640, 420)),
+        'icon_locations': {target.name: (150, 120), 'Applications': (490, 120), 'Readme.txt': (320, 310)},
+        'hide_extensions': ['Readme.txt'],
+        'default_view': 'icon-view', 'icon_size': 96, 'text_size': 13,
+        'show_icon_preview': False, 'show_status_bar': False, 'show_tab_view': False,
+        'show_toolbar': False, 'show_pathbar': False, 'show_sidebar': False,
+    })
     run('/usr/bin/hdiutil', 'verify', result, stdout=subprocess.DEVNULL)
     with tempfile.TemporaryDirectory(prefix='quest-vd-check-') as mount:
         run('/usr/bin/hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mount, result, stdout=subprocess.DEVNULL)
         try:
-            installer = Path(mount) / 'Install.command'
-            run(installer, '--check')
+            mounted = Path(mount)
+            visible = {p.name for p in mounted.iterdir() if not p.name.startswith('.')}
+            if visible != {target.name, 'Applications', 'Readme.txt'}:
+                raise ValueError('Unexpected visible DMG contents: ' + repr(visible))
+            if not (mounted / 'Applications').is_symlink() or (mounted / 'Applications').readlink() != Path('/Applications'):
+                raise ValueError('Applications shortcut is missing or incorrect')
+            if not (mounted / '.DS_Store').is_file() or not (mounted / '.background.tiff').is_file():
+                raise ValueError('Finder layout or arrow background is missing')
+            if (mounted / 'Readme.txt').stat().st_mode & 0o111:
+                raise ValueError('Readme must be plain text, not executable')
+            run('/usr/bin/codesign', '--verify', '--deep', '--strict', mounted / target.name)
             if verify_install:
-                check_install(installer)
+                check_install(mounted)
         finally:
             run('/usr/bin/hdiutil', 'detach', mount, stdout=subprocess.DEVNULL)
     print('DMG ready:', result.name)
     return result
 
 
-def check_install(installer):
-    """Exercise real installation and backup on the isolated runner, never the user's Applications."""
+def check_install(mounted):
+    """Test a drag-copy and the actual Readme commands without touching /Applications."""
+    readme = (mounted / 'Readme.txt').read_text()
+    start = readme.index('\n(\n') + 1
+    end = readme.index('\n)\n', start) + 2
+    script = readme[start:end]
+    assignment = 'quest_app="/Applications/' + APP_NAME + '.app"'
+    if script.count(assignment) != 1:
+        raise ValueError('Cannot locate the Readme destination for isolated testing')
     with tempfile.TemporaryDirectory(prefix='quest-vd-install-test-') as temp:
         root = Path(temp)
         destination = root / (APP_NAME + '.app')
-        run(installer, '--destination', destination)
-        run('/usr/bin/codesign', '--verify', '--deep', '--strict', destination)
-        run(destination / EXECUTABLE, '--usb-config-check', stdout=subprocess.DEVNULL)
-        run(installer, '--destination', destination)
-        backups = list((root / 'Quest VD USB Backups').glob('*/*.app.backup'))
-        if len(backups) != 1:
-            raise ValueError('Installer did not preserve the previous app.')
-        run('/usr/bin/codesign', '--verify', '--deep', '--strict', backups[0])
-        # A mistaken destination and a newer installed version must both survive untouched.
+        run('/usr/bin/ditto', mounted / destination.name, destination)
+        script = script.replace(assignment, 'quest_app=' + shlex.quote(str(destination)))
+        # Exercise both macOS shells, including a second run with no quarantine left.
+        for path in (destination, destination / EXECUTABLE):
+            run('/usr/bin/xattr', '-w', 'com.apple.quarantine', '0081;00000000;QuestVDUSB-CI;', path)
+        for shell in ('/bin/zsh', '/bin/bash'):
+            run(shell, '-c', script)
+            run('/usr/bin/codesign', '--verify', '--deep', '--strict', destination)
+            attributes = run('/usr/bin/xattr', '-lr', destination, capture_output=True, text=True).stdout
+            if 'com.apple.quarantine:' in attributes:
+                raise ValueError('Readme commands did not remove quarantine')
+            run(destination / EXECUTABLE, '--usb-config-check', stdout=subprocess.DEVNULL)
+        # A different app must fail before any signing or attribute changes.
         info_path = destination / 'Contents/Info.plist'
         info = plistlib.loads(info_path.read_bytes())
-        for change in ({'CFBundleIdentifier': 'example.unrelated'}, {'CFBundleVersion': '999.0.0.0'}):
-            info_path.write_bytes(plistlib.dumps(dict(info, **change)))
-            before = info_path.read_bytes()
-            attempt = subprocess.run([str(installer), '--destination', str(destination)], capture_output=True)
-            if attempt.returncode == 0 or info_path.read_bytes() != before:
-                raise ValueError('Installer replacement guard failed.')
+        info_path.write_bytes(plistlib.dumps(dict(info, CFBundleIdentifier='example.unrelated')))
+        before = sha256(destination / EXECUTABLE)
+        attempt = subprocess.run(['/bin/zsh', '-c', script], capture_output=True)
+        if attempt.returncode == 0 or sha256(destination / EXECUTABLE) != before:
+            raise ValueError('Readme app identity guard failed')
+    print('Verified drag-copy, Readme signing in zsh/bash, quarantine removal, and app identity guard.')

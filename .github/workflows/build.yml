@@ -40,11 +40,16 @@ jobs:
           if [[ "$REBUILD" == true ]]; then args+=(--rebuild); fi
           python3 src/ci_build.py plan --repository "$REPOSITORY" --dmg-url "$DMG_URL" \
             --output "$RUNNER_TEMP/plan.json" "${args[@]}"
+      - name: Prepare packaging
+        if: steps.plan.outputs.needs_build == 'true'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/dmg-tools"
+          "$RUNNER_TEMP/dmg-tools/bin/python" -m pip install --disable-pip-version-check -r packaging/requirements.txt
       - name: Build & verify
         id: build
         if: steps.plan.outputs.needs_build == 'true'
         run: >-
-          python3 src/ci_build.py build --plan "$RUNNER_TEMP/plan.json"
+          "$RUNNER_TEMP/dmg-tools/bin/python" src/ci_build.py build --plan "$RUNNER_TEMP/plan.json"
           --output "$RUNNER_TEMP/quest-vd-build" --verify-install
       - name: Save DMG
         id: upload
@@ -61,7 +66,7 @@ jobs:
           ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
         run: |
           echo "[Download your DMG]($ARTIFACT_URL) · available for 7 days." >> "$GITHUB_STEP_SUMMARY"
-          echo 'Open the DMG and run **Install.command**.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Drag the app to **Applications**, then follow **Readme** inside the DMG.' >> "$GITHUB_STEP_SUMMARY"
       - name: Clean up
         if: always()
-        run: rm -rf "$RUNNER_TEMP/quest-vd-build" "$RUNNER_TEMP/plan.json"
+        run: rm -rf "$RUNNER_TEMP/quest-vd-build" "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/dmg-tools"

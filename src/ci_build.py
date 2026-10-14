@@ -105,7 +105,7 @@ def main():
     build.add_argument('--plan', type=Path, required=True)
     build.add_argument('--output', type=Path, required=True)
     build.add_argument('--dmg', type=Path, help='Already downloaded official DMG (development only)')
-    build.add_argument('--verify-install', action='store_true', help='Runner only: test install and backup in a temporary folder')
+    build.add_argument('--verify-install', action='store_true', help='Runner only: test copying and Readme signing in a temporary folder')
     args = parser.parse_args()
     if args.command == 'plan':
         url = args.dmg_url.strip()

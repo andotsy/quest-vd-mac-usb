@@ -5,7 +5,7 @@
 1. Read Meta’s small version feed.
 2. Match a reviewed manifest and look for a successful, unexpired artifact.
 3. If needed, download from Meta, verify its hash and vendor signature, then patch.
-4. Build the DMG and test verification, local signing, installation, backup, and replacement guards.
+4. Build the Finder layout; test drag-copy, Readme signing, quarantine removal, and app identity checks.
 5. Upload the DMG directly as a file artifact; retention is 7 days.
 
 The artifact key includes the upstream hash and build inputs. Unchanged runs link to the existing artifact before fetching the app. **Build again** bypasses reuse. API failures stop the run.

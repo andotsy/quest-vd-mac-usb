@@ -85,7 +85,7 @@ class PlanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             root = Path(t)
             (root / 'packaging').mkdir()
-            script = root / 'packaging/Install.command'
+            script = root / 'packaging/Readme.txt'
             script.write_text('first')
             before = ci_build.artifact_name(self.m, root)
             script.write_text('second')
