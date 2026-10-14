@@ -2,7 +2,7 @@
 
 Run commands from the extracted kit or repository root. Python uses only its
 standard library. Apple's Command Line Tools provide the compiler and Python on
-supported Macs. No adb, Homebrew packages, or Python packages are installed.
+supported Macs.
 
 ## Build without installing
 
