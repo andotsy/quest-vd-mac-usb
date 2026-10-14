@@ -1,73 +1,34 @@
-# Advanced installation
+# Install
 
-Run commands from the extracted kit or repository root. Python uses only its
-standard library. Apple's Command Line Tools provide the compiler and Python on
-supported Macs.
+Download your **Build DMG** artifact, unzip it, open the DMG, and run **Install.command**. It copies the app into Applications, signs it locally, and saves your previous copy in **Quest VD USB Backups**.
 
-## Build without installing
+Open **Meta Quest Virtual Display**. Allow Accessibility and Screen Recording; restart when asked. Connect your Quest and choose the Mac’s USB entry.
 
-```sh
-python3 src/quest_usb.py --output "$HOME/Desktop/quest-usb-build"
-```
+If macOS blocks opening the installer or app, use **System Settings → Privacy & Security → Open Anyway**. The build isn’t notarized. [Apple’s guide](https://support.apple.com/en-us/102445) · [Signing](SIGNING.md)
 
-The output includes the app and `verification.json`. The smoke check exits before
-Meta starts its host. It does not launch the GUI or ask for privacy permissions.
-Use a new output directory each time; the tool refuses to overwrite a build.
+## Options
 
-## Make a personal DMG
+Run these from the mounted DMG in Terminal:
 
 ```sh
-python3 src/quest_usb.py --output "$HOME/Desktop/quest-usb-dmg-build" --make-dmg
-```
+# Verify without installing or stopping your session
+./Install.command --check
 
-This creates a DMG locally. Do not upload it to this public project or a public
-fork without appropriate distribution permission. GitHub's Actions workflow
-deliberately never publishes this DMG.
-
-## Use an official installer you already downloaded
-
-```sh
-python3 src/quest_usb.py --dmg '/path/to/official.dmg' --output '/path/to/new-build'
-```
-
-The DMG must match the manifest exactly. `--source-app '/path/to/original.app'`
-is also supported; the tool verifies the vendor signature, version, and executable
-hash before copying. A previously patched app is not a valid source.
-
-## Install somewhere else
-
-```sh
+# Install in your own Applications folder
 ./Install.command --destination "$HOME/Applications/Meta Quest Virtual Display.app"
+
+# Reuse a local signing certificate
+./Install.command --identity 'Your Code Signing Identity'
 ```
 
-Use one installation location consistently. The original and patched apps have
-different top-level bundle IDs but share some upstream settings, helpers, and
-protocol registrations. This is not complete side-by-side isolation. The patch
-guards against starting a second desktop host; the unmodified app does not know
-about that guard. Avoid starting it while the patched host is running. Launching
-through Meta's existing login helper has not been validated for the new identity;
-open the exact app in Finder instead.
+No Python, Xcode, or Command Line Tools are needed to install.
 
-## Backups and rollback
+## Update or restore
 
-The installer builds and validates first, normally quits hosts, and then moves an
-existing installation into `Quest VD USB Backups/<timestamp>/` beside the install
-destination. The backup ends in `.app.backup` so macOS does not treat it as another
-launchable app. Failed replacement restores the old app. Backups are never
-silently deleted.
+Sync your fork and run **Build DMG** again. Install the new DMG the same way. Use this flow instead of Meta’s in-app updater, which can replace the patch.
 
-To roll back: quit the current app normally, move it out of Applications, move the
-chosen backup back, and remove only the final `.backup` suffix. Open the restored
-app. Do not run both. Physical-screen restoration happens through the host's
-normal quit path; the installer does not kill it or fake blackout with a cover window.
+To restore: quit the app, move it aside, and move your saved `.app.backup` into Applications. Remove the final `.backup` suffix. Keep one host running at a time.
 
-## USB troubleshooting
+## USB missing?
 
-- Use a cable that carries data. A charging connection alone does not establish USB streaming.
-- Quit other Meta hosts before opening this one. A rejected duplicate exits immediately.
-- Reopen the Quest client and select the Mac's USB entry when available.
-- Check the Mac logs for a native USB session; cable presence alone is not proof of transport.
-- The pipeline cannot test headset connectivity. Rebuilding does not force a 120 Hz Horizon compositor.
-
-The patch does not replace Meta's screen-layout, aspect-ratio, blackout, or Quest
-toolbar implementation. Those behaviors remain controlled by the upstream apps.
+Use a data cable, quit other Meta hosts, then reopen the Quest client. A connected cable alone doesn’t confirm USB transport.

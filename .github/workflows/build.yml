@@ -1,0 +1,75 @@
+name: Build DMG
+
+on:
+  workflow_dispatch:
+    inputs:
+      dmg_url:
+        description: Meta DMG URL (leave blank for latest)
+        type: string
+        required: false
+      rebuild:
+        description: Build again even if an artifact exists
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: build-dmg
+  cancel-in-progress: false
+
+jobs:
+  fork:
+    if: github.repository == 'andotsy/quest-vd-mac-usb'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Fork this repository, then run **Build DMG** in your fork.' >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    if: github.repository != 'andotsy/quest-vd-mac-usb'
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Test
+        run: python3 -m unittest discover -s tests
+      - name: Check version
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          DMG_URL: ${{ inputs.dmg_url }}
+          REBUILD: ${{ inputs.rebuild }}
+        run: |
+          args=()
+          if [[ "$REBUILD" == true ]]; then args+=(--rebuild); fi
+          python3 src/ci_build.py plan --repository "$REPOSITORY" --dmg-url "$DMG_URL" \
+            --output "$RUNNER_TEMP/plan.json" "${args[@]}"
+      - name: Build & verify
+        id: build
+        if: steps.plan.outputs.needs_build == 'true'
+        run: >-
+          python3 src/ci_build.py build --plan "$RUNNER_TEMP/plan.json"
+          --output "$RUNNER_TEMP/quest-vd-build" --verify-install
+      - name: Save DMG
+        id: upload
+        if: steps.plan.outputs.needs_build == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.plan.outputs.artifact_name }}
+          path: ${{ steps.build.outputs.dmg }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Ready
+        if: steps.plan.outputs.needs_build == 'true'
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          echo "[Download your DMG]($ARTIFACT_URL) · available for 7 days." >> "$GITHUB_STEP_SUMMARY"
+          echo 'Unzip, open the DMG, and run **Install.command**.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Clean up
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/quest-vd-build" "$RUNNER_TEMP/plan.json"

@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
-"""Download, verify, patch, and locally sign Meta's Mac host. Standard library only."""
-import argparse
-import datetime
+"""Build the app and its self-contained installation DMG on a Mac runner."""
 import json
 import os
-import platform
 import plistlib
-import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
 from patching import patch_executable
-from upstream import APP_NAME, BUNDLE_ID, ROOT, download, manifests, sha256, tag_for, version_tuple
+from upstream import APP_NAME, BUNDLE_ID, ROOT, download, sha256, tag_for
 
 EXECUTABLE = Path('Contents/MacOS') / APP_NAME
 VENDOR_REQUIREMENT = '=anchor apple generic and certificate leaf[subject.OU] = "V9WTTPBFK9" and identifier "com.meta.virtualdesktop"'
@@ -63,103 +58,75 @@ def build(source, target, manifest, identity='-'):
             'performance': 'Requests 120 FPS; does not establish delivered FPS or headset refresh rate.'}
 
 
-def install(built, destination, manifest):
-    destination = destination.expanduser().absolute()
-    if destination.name != APP_NAME + '.app':
-        raise ValueError('Install destination must end with ' + APP_NAME + '.app')
-    if destination.is_symlink():
-        raise ValueError('Refusing a symlink install destination')
-    if destination.exists():
-        current = plistlib.loads((destination / 'Contents/Info.plist').read_bytes())
-        if current.get('CFBundleIdentifier') not in ('com.meta.virtualdesktop', 'com.codex.metausb120test', BUNDLE_ID):
-            raise ValueError('Destination is a different app; refusing replacement')
-        if version_tuple(current['CFBundleVersion']) > version_tuple(manifest['version']):
-            raise ValueError('Refusing to downgrade the installed Meta app')
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    # Stage on the same volume first. Installation needs no root when the
-    # destination directory is writable. Normal quit restores physical displays.
-    with tempfile.TemporaryDirectory(prefix='.quest-vd-usb-', dir=destination.parent) as staging:
-        staged = Path(staging) / destination.name
-        run('/usr/bin/ditto', built, staged)
-        run('/usr/bin/codesign', '--verify', '--deep', '--strict', staged)
-        helper = Path(staging) / 'quit-hosts'
-        run('/usr/bin/xcrun', 'clang', '-fobjc-arc', '-framework', 'AppKit', ROOT / 'src/quit-hosts.m', '-o', helper)
-        run(helper)
-        backup = None
-        if destination.exists():
-            stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
-            backup_dir = destination.parent / 'Quest VD USB Backups' / stamp
-            backup_dir.mkdir(parents=True)
-            # No .app suffix: Launch Services should not offer this backup as
-            # another live installation. Rename to .app only when rolling back.
-            backup = backup_dir / (destination.name + '.backup')
-            destination.rename(backup)
+def build_dmg(manifest, output, source_dmg=None, verify_install=False):
+    output = output.expanduser().absolute()
+    if output.exists():
+        raise ValueError('Choose a fresh build directory.')
+    output.mkdir(parents=True)
+    dmg = source_dmg.absolute() if source_dmg else download(manifest, output / 'upstream.dmg')
+    if dmg.stat().st_size != manifest['size'] or sha256(dmg) != manifest['dmg_sha256']:
+        raise ValueError('DMG checksum/size mismatch')
+    stage = output / 'image'
+    support = stage / 'Support'
+    support.mkdir(parents=True)
+    target = stage / (APP_NAME + '.app')
+    with tempfile.TemporaryDirectory(prefix='quest-vd-source-') as mount:
+        run('/usr/bin/hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mount, dmg, stdout=subprocess.DEVNULL)
         try:
-            staged.rename(destination)
-        except Exception:
-            if backup:
-                backup.rename(destination)
-            raise
-    print('Installed:', destination)
-    if backup:
-        print('Previous app preserved:', backup)
-    print('Open this app once in Finder. Grant Screen Recording and Accessibility to this new identity.')
-    print('No app was launched automatically.')
+            report = build(Path(mount) / target.name, target, manifest)
+        finally:
+            run('/usr/bin/hdiutil', 'detach', mount, stdout=subprocess.DEVNULL)
+    helper = support / 'prepare-install'
+    run('/usr/bin/xcrun', 'clang', '-arch', 'arm64', '-mmacosx-version-min=13.3', '-fobjc-arc',
+        '-Wall', '-Wextra', '-Werror', '-framework', 'AppKit', ROOT / 'src/quit-hosts.m', '-o', helper)
+    run('/usr/bin/codesign', '--force', '--sign', '-', helper)
+    for name in ('Install.command', 'Read Me.txt'):
+        run('/usr/bin/ditto', ROOT / 'packaging' / name, stage / name)
+    (stage / 'Install.command').chmod(0o755)
+    for name in ('NOTICE.md', 'LICENSE'):
+        run('/usr/bin/ditto', ROOT / name, support / name)
+    (support / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')
+    # codesign covers the complete app. These hashes cover the installer and support files.
+    checked = [stage / 'Install.command', stage / 'Read Me.txt', *sorted(support.iterdir())]
+    (support / 'SHA256SUMS').write_text(''.join(f'{sha256(p)}  {p.relative_to(stage)}\n' for p in checked))
+    dist = output / 'dist'
+    dist.mkdir()
+    result = dist / (tag_for(manifest) + '.dmg')
+    run('/usr/bin/hdiutil', 'create', '-srcfolder', stage, '-volname', 'Quest Virtual Display USB',
+        '-format', 'UDZO', result, stdout=subprocess.DEVNULL)
+    run('/usr/bin/hdiutil', 'verify', result, stdout=subprocess.DEVNULL)
+    with tempfile.TemporaryDirectory(prefix='quest-vd-check-') as mount:
+        run('/usr/bin/hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mount, result, stdout=subprocess.DEVNULL)
+        try:
+            installer = Path(mount) / 'Install.command'
+            run(installer, '--check')
+            if verify_install:
+                check_install(installer)
+        finally:
+            run('/usr/bin/hdiutil', 'detach', mount, stdout=subprocess.DEVNULL)
+    print('DMG ready:', result.name)
+    return result
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', help='Supported upstream version; defaults to newest reviewed manifest')
-    parser.add_argument('--source-app', type=Path, help='Use an original, Meta-signed app instead of downloading')
-    parser.add_argument('--dmg', type=Path, help='Use an already downloaded official DMG (checksum still required)')
-    parser.add_argument('--output', type=Path, default=ROOT / 'build', help='Private local build directory')
-    parser.add_argument('--install', action='store_true', help='Normally quit hosts, back up existing app, then install')
-    parser.add_argument('--destination', type=Path, default=Path('/Applications') / (APP_NAME + '.app'))
-    parser.add_argument('--identity', default=os.environ.get('QUEST_VD_SIGN_IDENTITY', '-'), help='Persistent local code-signing identity; default: ad-hoc')
-    parser.add_argument('--make-dmg', action='store_true', help='Create a local DMG for personal use; never uploaded by CI')
-    args = parser.parse_args()
-    if platform.system() != 'Darwin' or platform.machine() != 'arm64':
-        parser.error('Building requires an Apple Silicon Mac (run Terminal natively, not with Rosetta)')
-    run('/usr/bin/xcrun', '--find', 'clang', stdout=subprocess.DEVNULL)
-    known = manifests()
-    version = args.version or max(known, key=version_tuple)
-    if version not in known:
-        parser.error('Unsupported version; no files have been downloaded')
-    manifest = known[version]
-    output = args.output.expanduser().absolute()
-    output.mkdir(parents=True, exist_ok=True)
-    target = output / (APP_NAME + '.app')
-    if target.exists():
-        parser.error('Build output already exists. Choose a fresh --output directory.')
-    if args.source_app and args.dmg:
-        parser.error('Choose --source-app or --dmg')
-    if args.source_app:
-        report = build(args.source_app.absolute(), target, manifest, args.identity)
-    else:
-        dmg = args.dmg.absolute() if args.dmg else download(manifest, output / 'upstream.dmg')
-        if dmg.stat().st_size != manifest['size'] or sha256(dmg) != manifest['dmg_sha256']:
-            raise ValueError('DMG checksum/size mismatch')
-        with tempfile.TemporaryDirectory(prefix='quest-vd-mount-') as mount:
-            run('/usr/bin/hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mount, dmg, stdout=subprocess.DEVNULL)
-            try:
-                report = build(Path(mount) / (APP_NAME + '.app'), target, manifest, args.identity)
-            finally:
-                run('/usr/bin/hdiutil', 'detach', mount, stdout=subprocess.DEVNULL)
-    (output / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')
-    if args.make_dmg:
-        with tempfile.TemporaryDirectory(prefix='quest-vd-dmg-') as stage:
-            run('/usr/bin/ditto', target, Path(stage) / target.name)
-            os.symlink('/Applications', Path(stage) / 'Applications')
-            run('/usr/bin/hdiutil', 'create', '-srcfolder', stage, '-volname', APP_NAME,
-                '-format', 'UDZO', output / (tag_for(manifest) + '-personal.dmg'), stdout=subprocess.DEVNULL)
-    if args.install:
-        install(target, args.destination, manifest)
-    print('Verified local build:', target)
-
-
-if __name__ == '__main__':
-    try:
-        main()
-    except (ValueError, OSError, subprocess.CalledProcessError) as error:
-        print('Stopped:', error, file=sys.stderr)
-        sys.exit(1)
+def check_install(installer):
+    """Exercise real installation and backup on the isolated runner, never the user's Applications."""
+    with tempfile.TemporaryDirectory(prefix='quest-vd-install-test-') as temp:
+        root = Path(temp)
+        destination = root / (APP_NAME + '.app')
+        run(installer, '--destination', destination)
+        run('/usr/bin/codesign', '--verify', '--deep', '--strict', destination)
+        run(destination / EXECUTABLE, '--usb-config-check', stdout=subprocess.DEVNULL)
+        run(installer, '--destination', destination)
+        backups = list((root / 'Quest VD USB Backups').glob('*/*.app.backup'))
+        if len(backups) != 1:
+            raise ValueError('Installer did not preserve the previous app.')
+        run('/usr/bin/codesign', '--verify', '--deep', '--strict', backups[0])
+        # A mistaken destination and a newer installed version must both survive untouched.
+        info_path = destination / 'Contents/Info.plist'
+        info = plistlib.loads(info_path.read_bytes())
+        for change in ({'CFBundleIdentifier': 'example.unrelated'}, {'CFBundleVersion': '999.0.0.0'}):
+            info_path.write_bytes(plistlib.dumps(dict(info, **change)))
+            before = info_path.read_bytes()
+            attempt = subprocess.run([str(installer), '--destination', str(destination)], capture_output=True)
+            if attempt.returncode == 0 or info_path.read_bytes() != before:
+                raise ValueError('Installer replacement guard failed.')

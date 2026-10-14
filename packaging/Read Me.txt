@@ -1,0 +1,17 @@
+Meta Quest Virtual Display USB
+
+1. Run Install.command.
+2. Open Meta Quest Virtual Display in Applications.
+3. Allow Accessibility and Screen Recording. Restart when asked.
+4. Plug in your Quest and choose your Mac’s USB connection.
+
+The installer signs the app locally and keeps a backup of your previous copy.
+No Xcode needed. If macOS blocks opening it, use System Settings → Privacy &
+Security → Open Anyway. Local signing does not provide Apple notarization.
+
+USB enabled. 120 FPS requested; delivered frame rate depends on the session.
+
+Updates: sync your fork, then run Build DMG again.
+Source & help: https://github.com/andotsy/quest-vd-mac-usb
+
+Independent patch. Meta’s app remains subject to Meta’s terms.

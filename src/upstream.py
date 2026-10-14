@@ -69,7 +69,7 @@ def select_manifest(metadata, known):
     newest = max(known, key=version_tuple)
     candidate = max(metadata['version'], newest, key=version_tuple)
     if candidate not in known:
-        raise ValueError(f"Meta {candidate} needs compatibility review. No DMG downloaded; current release retained.")
+        raise ValueError(f"Meta {candidate} needs compatibility review. No DMG downloaded.")
     manifest = known[candidate]
     if metadata['version'] == candidate and (metadata['sha256'] != manifest['dmg_sha256'] or metadata['size'] != manifest['size']):
         raise ValueError('Meta replaced this version with different bytes; compatibility review required')

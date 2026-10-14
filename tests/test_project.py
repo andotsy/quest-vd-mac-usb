@@ -5,14 +5,12 @@ import struct
 import sys
 import tempfile
 import unittest
-import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 import patching
-import release
-import update
+import ci_build
 import upstream
 
 
@@ -67,61 +65,84 @@ class PatchingTests(unittest.TestCase):
             patching.patch_executable(b, m)
 
 
-class ReleaseTests(unittest.TestCase):
+class PlanTests(unittest.TestCase):
     def setUp(self):
         self.known = upstream.manifests()
         self.m = self.known[max(self.known, key=upstream.version_tuple)]
         self.meta = {'version': self.m['version'], 'sha256': self.m['dmg_sha256'], 'size': self.m['size']}
 
-    def test_duplicate_check_happens_without_downloading(self):
+    def test_duplicate_check_does_not_download(self):
         with patch('upstream.download', side_effect=AssertionError('DMG fetched')):
-            p = release.make_plan(self.meta, self.known, 'someone/fork', exists=lambda repo, tag: True)
+            p = ci_build.make_plan('someone/fork', self.known, self.meta, lookup=lambda *a: {'id': 1})
             self.assertFalse(p['needs_build'])
 
-    def test_new_patch_revision_can_release_same_meta_version(self):
-        previous_tag = upstream.tag_for(self.m)
+    def test_patch_revision_changes_artifact_identity(self):
+        before = ci_build.artifact_name(self.m)
         self.m['patch_revision'] += 1
-        p = release.make_plan(self.meta, self.known, 'someone/fork', exists=lambda repo, tag: tag == previous_tag)
+        self.assertNotEqual(before, ci_build.artifact_name(self.m))
+
+    def test_build_inputs_change_artifact_identity(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t)
+            (root / 'packaging').mkdir()
+            script = root / 'packaging/Install.command'
+            script.write_text('first')
+            before = ci_build.artifact_name(self.m, root)
+            script.write_text('second')
+            self.assertNotEqual(before, ci_build.artifact_name(self.m, root))
+
+    def test_rebuild_skips_lookup(self):
+        p = ci_build.make_plan('someone/fork', self.known, self.meta, rebuild=True,
+                              lookup=lambda *a: self.fail('lookup'))
         self.assertTrue(p['needs_build'])
 
-    def test_old_checkout_cannot_supersede_newer_release(self):
-        response = [[{'tag_name': 'meta-111.0.0.1.108-usb.1', 'draft': False, 'prerelease': False}]]
-        with patch('release.gh', return_value=json.dumps(response)):
-            self.assertTrue(release.release_exists('someone/fork', upstream.tag_for(self.m)))
+    def test_api_failure_stops_plan(self):
+        def fail(*args):
+            raise RuntimeError('API unavailable')
+        with self.assertRaisesRegex(RuntimeError, 'API unavailable'):
+            ci_build.make_plan('someone/fork', self.known, self.meta, lookup=fail)
 
-    def test_release_api_failure_does_not_trigger_a_build(self):
-        with patch('release.gh', side_effect=RuntimeError('API unavailable')):
-            with self.assertRaisesRegex(RuntimeError, 'API unavailable'):
-                release.make_plan(self.meta, self.known, 'someone/fork')
+    def test_expired_or_failed_artifacts_are_not_reused(self):
+        base = {'name': 'matching', 'id': 4, 'expired': False,
+                'expires_at': '2999-01-01T00:00:00Z', 'workflow_run': {'id': 123}}
+        cases = [dict(base, expired=True), dict(base, expires_at='2000-01-01T00:00:00Z')]
+        for item in cases:
+            with patch('ci_build.api', return_value=[{'artifacts': [item]}]) as api:
+                self.assertIsNone(ci_build.existing_artifact('someone/fork', 'matching'))
+                self.assertEqual(api.call_count, 1)
+        for conclusion, path in [('failure', '.github/workflows/build.yml'), ('success', '.github/workflows/other.yml')]:
+            with patch('ci_build.api', side_effect=[[{'artifacts': [base]}], [{'conclusion': conclusion, 'path': path}]]):
+                self.assertIsNone(ci_build.existing_artifact('someone/fork', 'matching'))
+        with patch('ci_build.api', side_effect=[[{'artifacts': [base]}], [{'conclusion': 'success', 'path': '.github/workflows/build.yml'}]]):
+            self.assertEqual(ci_build.existing_artifact('someone/fork', 'matching')['id'], 4)
 
-    def test_feed_downgrade_uses_known_official_build(self):
+    def test_lagging_feed_uses_newer_reviewed_version(self):
         self.meta['version'] = '109.0.0.2.108'
-        p = release.make_plan(self.meta, self.known, 'someone/fork', exists=lambda *a: False)
-        self.assertTrue(p['feed_behind'])
-        self.assertEqual(p['version'], self.m['version'])
+        m = ci_build.choose_manifest(self.known, self.meta)
+        self.assertEqual(m['version'], self.m['version'])
 
-    def test_unknown_new_version_stops_before_release_lookup(self):
+    def test_unknown_new_version_stops_before_artifact_lookup(self):
         self.meta['version'] = '999.0.0.1'
         with self.assertRaisesRegex(ValueError, 'compatibility review'):
-            release.make_plan(self.meta, self.known, 'someone/fork', exists=lambda *a: self.fail('API lookup too early'))
+            ci_build.make_plan('someone/fork', self.known, self.meta,
+                              lookup=lambda *a: self.fail('lookup too early'))
 
-    def test_replaced_upstream_binary_fails_closed(self):
+    def test_replaced_binary_is_refused(self):
         self.meta['sha256'] = '0' * 64
         with self.assertRaisesRegex(ValueError, 'different bytes'):
-            upstream.select_manifest(self.meta, self.known)
+            ci_build.choose_manifest(self.known, self.meta)
 
-    def test_published_kit_contains_source_only(self):
-        with tempfile.TemporaryDirectory() as t:
-            report = Path(t) / 'report.json'
-            report.write_text(json.dumps({'release': upstream.tag_for(self.m), 'vendor_signature_verified': True,
-                                         'local_signature_verified': True, 'config_smoke_passed': True}))
-            release.package(self.m['version'], report, Path(t) / 'dist', 'example/fork')
-            archive = next((Path(t) / 'dist').glob('*.zip'))
-            with zipfile.ZipFile(archive) as z:
-                for name in z.namelist():
-                    self.assertFalse(any(x in name for x in ('.app/', '.dmg', '.dylib', '.apk', '.pem', '.p12')))
-                self.assertEqual(json.loads(z.read('quest-vd-mac-usb/project.json'))['repository'], 'example/fork')
-                self.assertEqual((z.getinfo('quest-vd-mac-usb/Install.command').external_attr >> 16) & 0o777, 0o755)
+    def test_regional_url_reuses_same_build(self):
+        url = self.m['url'].replace('securecdn-iev1-1', 'securecdn-other')
+        m = ci_build.choose_manifest(self.known, dmg_url=url)
+        self.assertEqual(m['url'], url)
+        self.assertEqual(ci_build.artifact_name(m), ci_build.artifact_name(self.m))
+
+    def test_unknown_url_is_refused_before_lookup(self):
+        for url in ('https://example.org/app.dmg', 'https://oculus.com/binaries/download/?id=999'):
+            with self.assertRaises(ValueError):
+                ci_build.make_plan('someone/fork', self.known, dmg_url=url,
+                                  lookup=lambda *a: self.fail('lookup too early'))
 
 
 class DownloadTests(unittest.TestCase):
@@ -156,13 +177,6 @@ class DownloadTests(unittest.TestCase):
                 upstream.download({}, p)
             self.assertEqual(partial.read_bytes(), b'another running download')
 
-    def test_update_archive_cannot_escape(self):
-        with tempfile.TemporaryDirectory() as t:
-            p = Path(t) / 'bad.zip'
-            with zipfile.ZipFile(p, 'w') as z:
-                z.writestr('quest-vd-mac-usb/../../escaped', 'x')
-            with self.assertRaisesRegex(ValueError, 'Unsafe'):
-                update.extract_kit(p, Path(t) / 'out')
 
 
 if __name__ == '__main__':
