@@ -12,7 +12,6 @@
     main { max-width: 880px; margin: 0 auto; padding: 56px 28px 36px; }
     .brand { display: flex; align-items: center; gap: 12px; font-weight: 650; letter-spacing: -.02em; }
     .mark { width: 42px; height: 42px; padding: 10px; border-radius: 12px; background: #e2d3fc; color: #62408e; }
-    .offline { margin-left: auto; color: var(--muted); font-size: 13px; font-weight: 450; letter-spacing: 0; }
     header { padding: 44px 0 30px; }
     .eyebrow { margin: 0 0 12px; color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
     h1 { margin: 0; font-size: clamp(32px, 5vw, 46px); line-height: 1.15; font-weight: 720; letter-spacing: -.045em; }
@@ -52,7 +51,6 @@
     }
     @media (max-width: 560px) {
       main { padding: 28px 18px; }
-      .offline { display: none; }
       header { padding-top: 32px; }
       .install { grid-template-columns: 1fr; }
       .step { padding: 22px; }
@@ -60,14 +58,14 @@
       .repair { padding: 22px; }
       h2 { font-size: 22px; }
     }
-    @media print { body { background: white; color: black; } main { max-width: none; padding: 0; } button, .offline, #copy-status { display: none; } }
+    @media print { body { background: white; color: black; } main { max-width: none; padding: 0; } button, #copy-status { display: none; } }
   </style>
 </head>
 <body>
   <main>
     <div class="brand">
       <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="5"/><path d="M6 10h3m6 0h3M9 18l3-3 3 3"/></svg>
-      <span>Quest Virtual Display USB</span><span class="offline">Offline guide</span>
+      <span>Quest Virtual Display USB</span>
     </div>
     <header>
       <p class="eyebrow">Welcome / Getting started</p>

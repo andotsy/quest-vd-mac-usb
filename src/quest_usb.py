@@ -9,14 +9,24 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from patching import patch_executable
-from upstream import APP_NAME, BUNDLE_ID, ROOT, download, sha256, tag_for
+from upstream import APP_NAME, BUNDLE_ID, ROOT, download, sha256, tag_for, version_tuple
 
 EXECUTABLE = Path('Contents/MacOS') / APP_NAME
 VENDOR_REQUIREMENT = '=anchor apple generic and certificate leaf[subject.OU] = "V9WTTPBFK9" and identifier "com.meta.virtualdesktop"'
+USB_MINIMUM_MACOS = '13.3'
 
 
 def run(*args, **kwargs):
     return subprocess.run([str(a) for a in args], check=True, **kwargs)
+
+
+def minimum_macos(info):
+    """Preserve stricter vendor requirements and include our USB library's floor."""
+    versions = [USB_MINIMUM_MACOS, info.get('LSMinimumSystemVersion', USB_MINIMUM_MACOS)]
+    architecture_minimum = info.get('LSMinimumSystemVersionByArchitecture', {}).get('arm64')
+    if architecture_minimum:
+        versions.append(architecture_minimum)
+    return max(versions, key=version_tuple)
 
 
 def build(source, target, manifest, identity='-'):
@@ -32,7 +42,7 @@ def build(source, target, manifest, identity='-'):
     info.update(CFBundleName=APP_NAME, CFBundleDisplayName=APP_NAME, CFBundleIdentifier=BUNDLE_ID,
                 LSArchitecturePriority=['arm64'], LSRequiresNativeExecution=True,
                 SUEnableAutomaticChecks=False, SUAutomaticallyUpdate=False, SUAllowsAutomaticUpdates=False,
-                QuestVDUSBRelease=tag_for(manifest))
+                QuestVDUSBRelease=tag_for(manifest), LSMinimumSystemVersion=minimum_macos(info))
     info.pop('ApplicationIdentifier', None)
     (target / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
     overrides = json.loads((ROOT / 'src/overrides.json').read_text())
@@ -43,7 +53,7 @@ def build(source, target, manifest, identity='-'):
     for name in ('LICENSE', 'NOTICE.md'):
         run('/usr/bin/ditto', ROOT / name, target / 'Contents/Resources' / ('QuestVDUSB-' + name))
     library = target / 'Contents/MacOS/libQuestVDUSB.dylib'
-    run('/usr/bin/xcrun', 'clang', '-arch', 'arm64', '-mmacosx-version-min=13.3', '-dynamiclib', '-O2',
+    run('/usr/bin/xcrun', 'clang', '-arch', 'arm64', '-mmacosx-version-min=' + USB_MINIMUM_MACOS, '-dynamiclib', '-O2',
         '-Wall', '-Wextra', '-Werror', ROOT / 'src/USBConfig.c', '-o', library,
         '-framework', 'CoreFoundation', '-install_name', '@executable_path/libQuestVDUSB.dylib')
     # All modified code is re-signed locally. This intentionally removes Meta's
@@ -81,7 +91,12 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
         finally:
             run('/usr/bin/hdiutil', 'detach', mount, stdout=subprocess.DEVNULL)
     readme = stage / 'Readme.html'
-    run('/usr/bin/ditto', ROOT / 'packaging/Readme.html', readme)
+    bundled_info = plistlib.loads((target / 'Contents/Info.plist').read_bytes())
+    guide = (ROOT / 'packaging/Readme.html').read_text()
+    requirement = 'macOS 13.3 or later'
+    if guide.count(requirement) != 1:
+        raise ValueError('Cannot locate the installation guide macOS requirement')
+    readme.write_text(guide.replace(requirement, f"macOS {bundled_info['LSMinimumSystemVersion']} or later"))
     readme.chmod(0o644)
     (output / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')
     dist = output / 'dist'
@@ -91,9 +106,13 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
         raise ValueError('Invalid artifact filename')
     result = dist / filename
     background = output / 'dmg-background'
+    version = bundled_info['CFBundleVersion']
+    if version != manifest['version']:
+        raise ValueError('Bundled app version does not match the reviewed manifest')
+    volume_name = f'Quest VD USB {version}'
     run('/usr/bin/xcrun', 'swift', '-warnings-as-errors', ROOT / 'packaging/dmg-background.swift',
-        background, manifest['version'])
-    dmgbuild.build_dmg(str(result), 'Quest Virtual Display USB', settings={
+        background, target)
+    dmgbuild.build_dmg(str(result), volume_name, settings={
         'format': 'UDZO', 'files': [str(target), str(readme)],
         'symlinks': {'Applications': '/Applications', 'Terminal': '/System/Applications/Utilities/Terminal.app'},
         # Leave room for Finder's optional tab and status bars.
@@ -112,6 +131,14 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
         run('/usr/bin/hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mount, result, stdout=subprocess.DEVNULL)
         try:
             mounted = Path(mount)
+            volume_info = plistlib.loads(run('/usr/sbin/diskutil', 'info', '-plist', mounted,
+                                            capture_output=True).stdout)
+            if volume_info.get('VolumeName') != volume_name:
+                raise ValueError('Mounted disk image has an unexpected volume name')
+            packaged_info = plistlib.loads((mounted / target.name / 'Contents/Info.plist').read_bytes())
+            for key in ('CFBundleIdentifier', 'CFBundleVersion', 'LSMinimumSystemVersion', 'QuestVDUSBRelease'):
+                if packaged_info.get(key) != bundled_info.get(key):
+                    raise ValueError('Packaged app metadata differs: ' + key)
             visible = {p.name for p in mounted.iterdir() if not p.name.startswith('.')}
             if visible != {target.name, 'Applications', 'Readme.html', 'Terminal'}:
                 raise ValueError('Unexpected visible DMG contents: ' + repr(visible))

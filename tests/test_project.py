@@ -146,6 +146,17 @@ class PlanTests(unittest.TestCase):
                                   lookup=lambda *a: self.fail('lookup too early'))
 
 
+class PackagingMetadataTests(unittest.TestCase):
+    def test_minimum_os_includes_library_without_lowering_vendor_requirement(self):
+        self.assertEqual(quest_usb.minimum_macos({}), '13.3')
+        self.assertEqual(quest_usb.minimum_macos({'LSMinimumSystemVersion': '12.0'}), '13.3')
+        self.assertEqual(quest_usb.minimum_macos({'LSMinimumSystemVersion': '15.0'}), '15.0')
+        self.assertEqual(quest_usb.minimum_macos({'LSMinimumSystemVersion': '13.3',
+                         'LSMinimumSystemVersionByArchitecture': {'arm64': '14.0'}}), '14.0')
+        with self.assertRaises(ValueError):
+            quest_usb.minimum_macos({'LSMinimumSystemVersion': 'unknown'})
+
+
 class ReadmeTests(unittest.TestCase):
     def test_command_decodes_shell_characters_without_page_javascript(self):
         html = '<code id="repair-command">test 1 &lt; 2 &amp;&amp; echo "ready"</code><script>copy()</script>'

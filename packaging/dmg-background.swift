@@ -3,8 +3,27 @@ import AppKit
 // Render both resolutions so Finder uses a sharp background on Retina displays.
 let width: CGFloat = 760
 let height: CGFloat = 560
+guard CommandLine.arguments.count == 3 else {
+    throw NSError(domain: "QuestVDUSBPackaging", code: 1, userInfo: [
+        NSLocalizedDescriptionKey: "Usage: dmg-background.swift OUTPUT_PREFIX APP_BUNDLE"
+    ])
+}
 let output = CommandLine.arguments[1]
-let version = CommandLine.arguments[2]
+let app = URL(fileURLWithPath: CommandLine.arguments[2])
+let infoData = try Data(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
+guard let info = try PropertyListSerialization.propertyList(from: infoData, format: nil) as? [String: Any],
+      info["CFBundleIdentifier"] as? String == "io.github.quest-vd-mac-usb",
+      let version = info["CFBundleVersion"] as? String,
+      version.range(of: #"^[0-9]+(?:\.[0-9]+){1,5}$"#, options: .regularExpression) != nil,
+      let minimumSystemVersion = info["LSMinimumSystemVersion"] as? String,
+      minimumSystemVersion.range(of: #"^[0-9]+(?:\.[0-9]+){0,2}$"#, options: .regularExpression) != nil else {
+    throw NSError(domain: "QuestVDUSBPackaging", code: 2, userInfo: [
+        NSLocalizedDescriptionKey: "The app bundle version or minimum macOS version is missing or invalid."
+    ])
+}
+var osComponents = minimumSystemVersion.split(separator: ".")
+while osComponents.count > 1, osComponents.last == "0" { osComponents.removeLast() }
+let systemLabel = "macOS \(osComponents.joined(separator: "."))+  ·  Apple silicon"
 
 func color(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat) -> NSColor {
     NSColor(srgbRed: red / 255, green: green / 255, blue: blue / 255, alpha: 1)
@@ -75,7 +94,7 @@ for scale in [1, 2] {
 
     text("Then open Readme to finish setup.", x: 54, top: 327, w: 652, size: 15,
          weight: .medium, ink: muted, alignment: .center)
-    text("macOS 13.3+  ·  Apple silicon", x: 54, top: 476, w: 652, size: 11,
+    text(systemLabel, x: 54, top: 476, w: 652, size: 11,
          weight: .regular, ink: muted, alignment: .center)
 
     NSGraphicsContext.restoreGraphicsState()
