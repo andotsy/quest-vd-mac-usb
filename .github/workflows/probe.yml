@@ -1,0 +1,21 @@
+name: Probe Meta
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Probe latest Meta build
+        run: python3 src/ci_build.py probe --output "$RUNNER_TEMP/quest-vd-probe"
+      - name: Clean up
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/quest-vd-probe"

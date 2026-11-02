@@ -106,6 +106,8 @@ def main():
     build.add_argument('--output', type=Path, required=True)
     build.add_argument('--dmg', type=Path, help='Already downloaded official DMG (development only)')
     build.add_argument('--verify-install', action='store_true', help='Runner only: test copying and Readme signing in a temporary folder')
+    probe = commands.add_parser('probe', help='Check Meta’s latest app without building')
+    probe.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if args.command == 'plan':
         url = args.dmg_url.strip()
@@ -127,9 +129,19 @@ def main():
                     f"Reviewed compatible versions: {versions}.", warning=True)
         elif metadata and metadata['version'] != version:
             summary(f"Meta’s feed reports {metadata['version']}; using the newer reviewed {version} build.")
+    elif platform.system() != 'Darwin' or platform.machine() != 'arm64':
+        raise ValueError('Probing and building require an Apple Silicon Mac runner.')
+    elif args.command == 'probe':
+        from quest_usb import probe_app
+        known = manifests()
+        m = choose_manifest(known, latest_metadata())
+        stale, changes = probe_app(m, args.output)
+        status = 'reviewed' if reviewed(m, known) else 'not reviewed yet'
+        summary(f"Meta {m['version']} ({status}): every patch pattern matches, at "
+                f"{', '.join(c['address'] for c in changes)}.")
+        summary(f'{len(stale)} override warning(s); see the annotations.' if stale else
+                'Meta still declares every setting the overrides change. Server-side rollouts aren’t visible here.')
     else:
-        if platform.system() != 'Darwin' or platform.machine() != 'arm64':
-            raise ValueError('Building requires an Apple Silicon Mac runner.')
         from quest_usb import build_dmg
         p = json.loads(args.plan.read_text())
         if not p['needs_build']:

@@ -8,6 +8,7 @@ import tempfile
 from html.parser import HTMLParser
 from pathlib import Path
 
+from flags import overrides, stale_overrides
 from patching import patch_executable
 from upstream import APP_NAME, BUNDLE_ID, ROOT, download, sha256, tag_for, version_tuple
 
@@ -29,13 +30,27 @@ def minimum_macos(info):
     return max(versions, key=version_tuple)
 
 
-def build(source, target, manifest, identity='-'):
-    if target.exists():
-        raise ValueError('Output app already exists; use a fresh build directory')
+def original_app(source, manifest):
+    """Read Meta's untouched app after checking its version and vendor signature."""
     info = plistlib.loads((source / 'Contents/Info.plist').read_bytes())
     if info['CFBundleVersion'] != manifest['version'] or info['CFBundleIdentifier'] != 'com.meta.virtualdesktop':
         raise ValueError('Expected the original Meta app at the supported version')
     run('/usr/bin/codesign', '--verify', '--deep', '--strict', '-R', VENDOR_REQUIREMENT, source)
+    return info
+
+
+def warn_stale_overrides(source):
+    stale = stale_overrides(source)
+    for note in stale:
+        print('::warning::' + note)
+    return stale
+
+
+def build(source, target, manifest, identity='-'):
+    if target.exists():
+        raise ValueError('Output app already exists; use a fresh build directory')
+    info = original_app(source, manifest)
+    stale = warn_stale_overrides(source)
     patched, changes = patch_executable((source / EXECUTABLE).read_bytes(), manifest)
     for change in changes:
         print(f"Patched {change['address']} ({change['before']} -> {change['after']}): {change['purpose']}")
@@ -47,11 +62,7 @@ def build(source, target, manifest, identity='-'):
                 QuestVDUSBRelease=tag_for(manifest), LSMinimumSystemVersion=minimum_macos(info))
     info.pop('ApplicationIdentifier', None)
     (target / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
-    overrides = json.loads((ROOT / 'src/overrides.json').read_text())
-    # These existing Meta switches disable both silent-update implementations.
-    for key in ('frl_mqrd_silent_update_enabled', 'frl_mqrd_silent_update_phase_2'):
-        overrides['remote_desktop_mqrd_default:' + key] = {'type': 'boolean', 'value': 'false'}
-    (target / 'Contents/Resources/usb-overrides.json').write_text(json.dumps(overrides, indent=2) + '\n')
+    (target / 'Contents/Resources/usb-overrides.json').write_text(json.dumps(overrides(), indent=2) + '\n')
     for name in ('LICENSE', 'NOTICE.md'):
         run('/usr/bin/ditto', ROOT / name, target / 'Contents/Resources' / ('QuestVDUSB-' + name))
     library = target / 'Contents/MacOS/libQuestVDUSB.dylib'
@@ -67,7 +78,7 @@ def build(source, target, manifest, identity='-'):
         raise ValueError('Bundled initializer did not run')
     return {'release': tag_for(manifest), 'upstream_version': manifest['version'],
             'bundle_id': BUNDLE_ID, 'app_name': APP_NAME, 'upstream_executable_sha256': sha256(source / EXECUTABLE),
-            'patched_executable_sha256': sha256(target / EXECUTABLE), 'patches': changes,
+            'patched_executable_sha256': sha256(target / EXECUTABLE), 'patches': changes, 'stale_overrides': stale,
             'vendor_signature_verified': True, 'local_signature_verified': True,
             'config_smoke_passed': True, 'signing': 'ad-hoc' if identity == '-' else 'local identity',
             'performance': 'Requests 120 FPS; does not establish delivered FPS or headset refresh rate.'}
@@ -162,6 +173,25 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
             run('/usr/bin/hdiutil', 'detach', mount, stdout=subprocess.DEVNULL)
     print('DMG ready:', result.name)
     return result
+
+
+def probe_app(manifest, output):
+    """Check Meta's app without building: overrides it no longer needs, and patch matches."""
+    output = output.expanduser().absolute()
+    if output.exists():
+        raise ValueError('Choose a fresh probe directory.')
+    output.mkdir(parents=True)
+    dmg = download(manifest, output / 'upstream.dmg')
+    with tempfile.TemporaryDirectory(prefix='quest-vd-probe-') as mount:
+        run('/usr/bin/hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mount, dmg, stdout=subprocess.DEVNULL)
+        try:
+            source = Path(mount) / (APP_NAME + '.app')
+            original_app(source, manifest)
+            stale = warn_stale_overrides(source)
+            changes = patch_executable((source / EXECUTABLE).read_bytes(), manifest)[1]
+        finally:
+            run('/usr/bin/hdiutil', 'detach', mount, stdout=subprocess.DEVNULL)
+    return stale, changes
 
 
 def readme_command(html):

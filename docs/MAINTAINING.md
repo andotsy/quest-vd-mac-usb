@@ -18,6 +18,12 @@ The newest reviewed version is a floor when Meta’s feed lags behind a rollout.
 
 The optional URL accepts a reviewed Meta binary, including regional CDN URLs with the same download ID. Every download still requires the exact size, hash, vendor signature, and original instructions.
 
+## Probe
+
+**Probe Meta** runs weekly and on demand. It downloads the version Build DMG would pick, verifies it, and checks that every patch pattern still matches and that Meta still declares each setting in `src/overrides.json`. Pattern failures fail the run. A missing setting is a warning; Build DMG logs the same warnings.
+
+When Meta stops gating USB but still ships the USB code, the warning says the USB override is no longer needed. Server-side rollouts aren’t visible in the download. GitHub pauses scheduled runs after 60 days without repository activity.
+
 ## Updating the patch
 
 Patches find their code by instruction shape: opcodes and constants must match, while registers, memory offsets, and branch targets may move. A pattern that matches zero or several times stops the build.

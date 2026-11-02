@@ -11,6 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 import patching
 import ci_build
+import flags
 import upstream
 import quest_usb
 
@@ -178,6 +179,43 @@ class PlanTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ci_build.make_plan('someone/fork', self.known, dmg_url=url,
                                   lookup=lambda *a: self.fail('lookup too early'))
+
+
+class FlagTests(unittest.TestCase):
+    PARAMS = 'v2,abc,3\n*oculus_remote_desktop,19,c718\nusb_transport_enabled,\nlink,6,c\n' \
+             '*remote_desktop_mqrd_default,-1,112e2\nmqrd_enable_disco_server,4\nshowing_capture_fps_interval,4,8\n'
+    VALUES = {'oculus_remote_desktop:usb_transport_enabled': {'type': 'boolean'},
+              'remote_desktop_mqrd_default:mqrd_enable_disco_server': {'type': 'boolean'},
+              'remote_desktop_mqrd_default:showing_capture_fps_interval': {'type': 'int64'}}
+
+    def test_params_map_types_by_config(self):
+        self.assertEqual(flags.declared(self.PARAMS), {
+            'oculus_remote_desktop:usb_transport_enabled': 'boolean', 'oculus_remote_desktop:link': 'string',
+            'remote_desktop_mqrd_default:mqrd_enable_disco_server': 'boolean',
+            'remote_desktop_mqrd_default:showing_capture_fps_interval': 'int64'})
+
+    def test_declared_overrides_need_no_warning(self):
+        self.assertEqual(flags.findings(flags.declared(self.PARAMS), b'TransportUsbServer', self.VALUES), [])
+
+    def test_removed_usb_gate_means_override_no_longer_needed(self):
+        params = flags.declared(self.PARAMS.replace('usb_transport_enabled,\n', ''))
+        [note] = flags.findings(params, b'TransportUsbServer', self.VALUES)
+        self.assertIn('no longer needed', note)
+        [note] = flags.findings(params, b'', self.VALUES)
+        self.assertIn('likely gone', note)
+
+    def test_settings_read_by_full_name_or_retyped(self):
+        values = dict(self.VALUES, **{'remote_desktop_mqrd_default:silent': {'type': 'boolean'}})
+        self.assertEqual(flags.findings(flags.declared(self.PARAMS), b'\0remote_desktop_mqrd_default:silent\0', values), [])
+        [note] = flags.findings(flags.declared(self.PARAMS), b'', values)
+        self.assertIn('no effect', note)
+        retyped = dict(self.VALUES, **{'remote_desktop_mqrd_default:showing_capture_fps_interval': {'type': 'boolean'}})
+        [note] = flags.findings(flags.declared(self.PARAMS), b'', retyped)
+        self.assertIn('as int64', note)
+
+    def test_overrides_include_silent_update_switches(self):
+        self.assertIn('remote_desktop_mqrd_default:frl_mqrd_silent_update_phase_2', flags.overrides())
+        self.assertIn('oculus_remote_desktop:usb_transport_enabled', flags.overrides())
 
 
 class PackagingMetadataTests(unittest.TestCase):
