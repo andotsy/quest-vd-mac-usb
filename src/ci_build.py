@@ -12,7 +12,7 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-from upstream import ROOT, latest_metadata, manifests, official_url, select_manifest, tag_for
+from upstream import ROOT, latest_metadata, manifests, official_url, select_manifest, tag_for, version_tuple
 
 
 def api(endpoint):
@@ -86,11 +86,11 @@ def output(key, value):
             stream.write(f'{key}={value}\n')
 
 
-def summary(message):
-    print(message)
+def summary(message, warning=False):
+    print(('::warning::' if warning else '') + message)
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
-            stream.write(message + '\n\n')
+            stream.write(('**Warning:** ' if warning else '') + message + '\n\n')
 
 
 def main():
@@ -110,7 +110,8 @@ def main():
     if args.command == 'plan':
         url = args.dmg_url.strip()
         metadata = None if url else latest_metadata()
-        p = make_plan(args.repository, manifests(), metadata, url, args.rebuild)
+        known = manifests()
+        p = make_plan(args.repository, known, metadata, url, args.rebuild)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(p, indent=2) + '\n')
         output('needs_build', str(p['needs_build']).lower())
@@ -119,8 +120,13 @@ def main():
             summary(f"Already built. [Download your DMG]({p['previous']['url']}).")
         else:
             print(f"Building Meta {p['manifest']['version']} + USB.")
-        if metadata and metadata['version'] != p['manifest']['version']:
-            summary(f"Meta’s feed reports {metadata['version']}; using the newer reviewed {p['manifest']['version']} build.")
+        version = p['manifest']['version']
+        if metadata and version_tuple(metadata['version']) > version_tuple(version):
+            compatible = ', '.join(sorted(known, key=version_tuple, reverse=True))
+            summary(f"Meta {metadata['version']} isn’t reviewed for compatibility yet; building the newest "
+                    f"compatible version, {version}. Compatible versions: {compatible}.", warning=True)
+        elif metadata and metadata['version'] != version:
+            summary(f"Meta’s feed reports {metadata['version']}; using the newer reviewed {version} build.")
     else:
         if platform.system() != 'Darwin' or platform.machine() != 'arm64':
             raise ValueError('Building requires an Apple Silicon Mac runner.')

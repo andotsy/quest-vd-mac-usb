@@ -122,11 +122,12 @@ class PlanTests(unittest.TestCase):
         m = ci_build.choose_manifest(self.known, self.meta)
         self.assertEqual(m['version'], self.m['version'])
 
-    def test_unknown_new_version_stops_before_artifact_lookup(self):
-        self.meta['version'] = '999.0.0.1'
-        with self.assertRaisesRegex(ValueError, 'compatibility review'):
-            ci_build.make_plan('someone/fork', self.known, self.meta,
-                              lookup=lambda *a: self.fail('lookup too early'))
+    def test_unknown_new_version_builds_newest_reviewed_version(self):
+        self.meta.update(version='999.0.0.1', sha256='0' * 64, size=1)
+        p = ci_build.make_plan('someone/fork', self.known, self.meta, lookup=lambda *a: None)
+        self.assertEqual(p['manifest'], self.m)
+        self.assertTrue(p['needs_build'])
+        self.assertEqual(p['feed_version'], '999.0.0.1')
 
     def test_replaced_binary_is_refused(self):
         self.meta['sha256'] = '0' * 64

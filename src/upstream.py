@@ -65,13 +65,10 @@ def tag_for(manifest):
 
 
 def select_manifest(metadata, known):
-    """Do not downgrade during phased rollouts; unknown newer releases fail closed."""
+    """Do not downgrade during phased rollouts; unknown newer releases build the newest reviewed one."""
     newest = max(known, key=version_tuple)
-    candidate = max(metadata['version'], newest, key=version_tuple)
-    if candidate not in known:
-        raise ValueError(f"Meta {candidate} needs compatibility review. No DMG downloaded.")
-    manifest = known[candidate]
-    if metadata['version'] == candidate and (metadata['sha256'] != manifest['dmg_sha256'] or metadata['size'] != manifest['size']):
+    manifest = known[newest]
+    if metadata['version'] == newest and (metadata['sha256'] != manifest['dmg_sha256'] or metadata['size'] != manifest['size']):
         raise ValueError('Meta replaced this version with different bytes; compatibility review required')
     return manifest
 

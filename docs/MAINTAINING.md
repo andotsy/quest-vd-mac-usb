@@ -14,7 +14,7 @@ The artifact key includes the upstream hash and build inputs. Unchanged runs lin
 
 ## Version selection
 
-The newest reviewed version is a floor when Meta’s feed lags behind a rollout. A newer unknown version, changed hash, or unreviewed URL stops before downloading.
+The newest reviewed version is a floor when Meta’s feed lags behind a rollout. A newer unknown version builds the newest reviewed one instead, with a warning listing the compatible versions. A changed hash or unreviewed URL stops before downloading.
 
 The optional URL accepts a reviewed Meta binary, including regional CDN URLs with the same download ID. Every download still requires the exact size, hash, vendor signature, and original instructions.
 
