@@ -65,12 +65,22 @@ def tag_for(manifest):
 
 
 def select_manifest(metadata, known):
-    """Do not downgrade during phased rollouts; unknown newer releases build the newest reviewed one."""
-    newest = max(known, key=version_tuple)
-    manifest = known[newest]
-    if metadata['version'] == newest and (metadata['sha256'] != manifest['dmg_sha256'] or metadata['size'] != manifest['size']):
-        raise ValueError('Meta replaced this version with different bytes; compatibility review required')
+    """Build Meta’s latest release; the newest reviewed version is a floor during phased rollouts."""
+    newest = known[max(known, key=version_tuple)]
+    if version_tuple(metadata['version']) < version_tuple(newest['version']):
+        return newest
+    pinned = known.get(metadata['version'])
+    if pinned and (pinned['dmg_sha256'], pinned['size']) == (metadata['sha256'], metadata['size']):
+        return pinned
+    # Unreviewed bytes: the feed pins the download, Meta's signature is verified, and patterns locate the code.
+    manifest = dict(newest, version=metadata['version'], url=metadata['url'],
+                    size=metadata['size'], dmg_sha256=metadata['sha256'])
+    del manifest['executable_sha256']
     return manifest
+
+
+def reviewed(manifest, known):
+    return known.get(manifest['version'], {}).get('dmg_sha256') == manifest['dmg_sha256']
 
 
 def sha256(path):

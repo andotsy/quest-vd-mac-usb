@@ -17,13 +17,13 @@ Tested on **M4 Pro + Quest 3**. Delivered 120 Hz isn’t verified. [Measurements
 
 Allow Accessibility and Screen Recording, restart when asked, and connect your Quest with a USB data cable.
 
-GitHub downloads, patches, and packages the latest reviewed Meta build. **No Xcode needed on your Mac.**
+GitHub downloads, patches, and packages Meta’s latest build. **No Xcode needed on your Mac.**
 
 Apple Silicon · macOS 13.3+ · Meta’s Quest Virtual Display client
 
 ## Next time
 
-**Sync your fork → run Build DMG again.** Unchanged builds are reused; artifacts last 7 days. Until a new Meta version is reviewed, the newest compatible one is built with a warning.
+**Sync your fork → run Build DMG again.** Unchanged builds are reused; artifacts last 7 days. New Meta versions build automatically, with a warning until reviewed.
 
 Locally signed, not notarized. [Install & signing](docs/INSTALL.md) · [Build details](docs/MAINTAINING.md)
 

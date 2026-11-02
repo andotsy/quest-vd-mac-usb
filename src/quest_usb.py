@@ -37,6 +37,8 @@ def build(source, target, manifest, identity='-'):
         raise ValueError('Expected the original Meta app at the supported version')
     run('/usr/bin/codesign', '--verify', '--deep', '--strict', '-R', VENDOR_REQUIREMENT, source)
     patched, changes = patch_executable((source / EXECUTABLE).read_bytes(), manifest)
+    for change in changes:
+        print(f"Patched {change['address']} ({change['before']} -> {change['after']}): {change['purpose']}")
     run('/usr/bin/ditto', source, target)
     (target / EXECUTABLE).write_bytes(patched)
     info.update(CFBundleName=APP_NAME, CFBundleDisplayName=APP_NAME, CFBundleIdentifier=BUNDLE_ID,
@@ -108,7 +110,7 @@ def build_dmg(manifest, output, source_dmg=None, verify_install=False, artifact_
     background = output / 'dmg-background'
     version = bundled_info['CFBundleVersion']
     if version != manifest['version']:
-        raise ValueError('Bundled app version does not match the reviewed manifest')
+        raise ValueError('Bundled app version does not match the manifest')
     volume_name = f'Quest VD USB {version}'
     run('/usr/bin/xcrun', 'swift', '-warnings-as-errors', ROOT / 'packaging/dmg-background.swift',
         background, target)

@@ -15,8 +15,14 @@ import upstream
 import quest_usb
 
 
-def synthetic_binary():
-    # Artificial Mach-O fixture, not copied from Meta. One file-backed segment.
+PATTERN = ['79408408  ldrh w8, [x0, #66]', '52900049  mov w9, #0x8002', '6b09011f  cmp w8, w9',
+           '54000061  b.ne .+0xc', '52800793  mov w19, #0x3c', 'd65f03c0  ret']
+# Same shape with a different offset and register, as a newer compiler run might produce.
+CODE = (0x79407408, 0x52900049, 0x6b09011f, 0x54000061, 0x52800794, 0xd65f03c0)
+
+
+def synthetic_binary(code=CODE):
+    # Artificial Mach-O fixture, not copied from Meta. One file-backed segment with a code section.
     b = bytearray(0x1200)
     struct.pack_into('>II', b, 0, 0xcafebabe, 1)
     struct.pack_into('>IIIII', b, 8, 0x0100000c, 0, 0x200, 0x1000, 9)
@@ -24,32 +30,47 @@ def synthetic_binary():
     struct.pack_into('<II', b, 0x220, 0x19, 152)
     struct.pack_into('<QQQQ', b, 0x220 + 24, 0x100000000, 0x1000, 0, 0x1000)
     struct.pack_into('<I', b, 0x220 + 64, 1)
-    struct.pack_into('<I', b, 0x220 + 72 + 48, 0x400)
-    b[0x600:0x604] = b'ABCD'
+    struct.pack_into('<16s16sQQI', b, 0x220 + 72, b'__text', b'__TEXT', 0x100000400, 0x200, 0x400)
+    struct.pack_into(f'<{len(code)}I', b, 0x640, *code)
     m = {'executable_sha256': hashlib.sha256(b).hexdigest(), 'patches': [
-        {'address': '0x100000400', 'before': b'ABCD'.hex(), 'after': b'EFGH'.hex(), 'purpose': 'fixture'}]}
+        {'purpose': 'fixture', 'pattern': PATTERN, 'index': 4, 'after': '52800f00'}]}
     return b, m
 
 
 class PatchingTests(unittest.TestCase):
-    def test_patch_and_loader_command_without_changing_length(self):
+    def test_patch_matches_shape_and_keeps_register(self):
         b, m = synthetic_binary()
         result, report = patching.patch_executable(b, m)
-        self.assertEqual(result[0x600:0x604], b'EFGH')
+        self.assertEqual(struct.unpack_from('<I', result, 0x650)[0], 0x52800f14)
         self.assertEqual(len(result), len(b))
         self.assertIn(b'@executable_path/libQuestVDUSB.dylib\0', result)
-        self.assertEqual(len(report), 1)
+        self.assertEqual([r['address'] for r in report], ['0x100000450'])
         with self.assertRaisesRegex(ValueError, 'hash'):
             patching.patch_executable(result, m)
+        del m['executable_sha256']
+        with self.assertRaisesRegex(ValueError, 'found 0'):
+            patching.patch_executable(result, m)
 
-    def test_unknown_hash_and_instruction_refused(self):
-        b, m = synthetic_binary()
-        m['patches'][0]['before'] = '00000000'
-        with self.assertRaisesRegex(ValueError, 'instruction'):
+    def test_changed_constant_and_unknown_hash_are_refused(self):
+        b, m = synthetic_binary(code=CODE[:4] + (0x528007b4,) + CODE[5:])
+        with self.assertRaisesRegex(ValueError, 'found 0'):
             patching.patch_executable(b, m)
-        b[0] = 0
+        b[0x700] = 1
         with self.assertRaisesRegex(ValueError, 'hash'):
             patching.patch_executable(b, m)
+
+    def test_ambiguous_pattern_is_refused(self):
+        b, m = synthetic_binary(code=CODE * 2)
+        with self.assertRaisesRegex(ValueError, 'found 2'):
+            patching.patch_executable(b, m)
+
+    def test_manifest_patterns_are_well_formed(self):
+        for manifest in upstream.manifests().values():
+            for patch in manifest['patches']:
+                words = [int(line.split()[0], 16) for line in patch['pattern']]
+                self.assertLess(patch['index'], len(words))
+                self.assertEqual(int(patch['after'], 16) & 31, 0)
+                patching.pattern_regex(words)
 
     def test_header_padding_is_not_overwritten(self):
         b, m = synthetic_binary()
@@ -70,7 +91,8 @@ class PlanTests(unittest.TestCase):
     def setUp(self):
         self.known = upstream.manifests()
         self.m = self.known[max(self.known, key=upstream.version_tuple)]
-        self.meta = {'version': self.m['version'], 'sha256': self.m['dmg_sha256'], 'size': self.m['size']}
+        self.meta = {'version': self.m['version'], 'sha256': self.m['dmg_sha256'], 'size': self.m['size'],
+                     'url': self.m['url']}
 
     def test_duplicate_check_does_not_download(self):
         with patch('upstream.download', side_effect=AssertionError('DMG fetched')):
@@ -122,17 +144,28 @@ class PlanTests(unittest.TestCase):
         m = ci_build.choose_manifest(self.known, self.meta)
         self.assertEqual(m['version'], self.m['version'])
 
-    def test_unknown_new_version_builds_newest_reviewed_version(self):
-        self.meta.update(version='999.0.0.1', sha256='0' * 64, size=1)
-        p = ci_build.make_plan('someone/fork', self.known, self.meta, lookup=lambda *a: None)
-        self.assertEqual(p['manifest'], self.m)
-        self.assertTrue(p['needs_build'])
-        self.assertEqual(p['feed_version'], '999.0.0.1')
+    def test_reviewed_feed_uses_pinned_manifest(self):
+        self.assertEqual(ci_build.choose_manifest(self.known, self.meta), self.m)
+        self.assertTrue(upstream.reviewed(self.m, self.known))
 
-    def test_replaced_binary_is_refused(self):
+    def test_new_version_builds_from_feed_with_reviewed_patterns(self):
+        url = 'https://securecdn-iev1-1.oculus.com/binaries/download/?id=999'
+        self.meta.update(version='999.0.0.1', sha256='0' * 64, size=1, url=url)
+        p = ci_build.make_plan('someone/fork', self.known, self.meta, lookup=lambda *a: None)
+        m = p['manifest']
+        self.assertEqual((m['version'], m['dmg_sha256'], m['size'], m['url']), ('999.0.0.1', '0' * 64, 1, url))
+        self.assertEqual(m['patches'], self.m['patches'])
+        self.assertNotIn('executable_sha256', m)
+        self.assertFalse(upstream.reviewed(m, self.known))
+        self.assertTrue(p['needs_build'])
+        # The build step re-derives the same manifest from the saved feed.
+        self.assertEqual(ci_build.choose_manifest(self.known, p['feed']), m)
+
+    def test_replaced_binary_is_built_unreviewed(self):
         self.meta['sha256'] = '0' * 64
-        with self.assertRaisesRegex(ValueError, 'different bytes'):
-            ci_build.choose_manifest(self.known, self.meta)
+        m = ci_build.choose_manifest(self.known, self.meta)
+        self.assertEqual(m['dmg_sha256'], '0' * 64)
+        self.assertNotIn('executable_sha256', m)
 
     def test_regional_url_reuses_same_build(self):
         url = self.m['url'].replace('securecdn-iev1-1', 'securecdn-other')

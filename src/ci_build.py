@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plan an artifact before downloading Meta's app; build only reviewed bytes."""
+"""Plan an artifact before downloading Meta's app; build only verified Meta bytes."""
 import argparse
 import datetime as dt
 import hashlib
@@ -12,7 +12,7 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-from upstream import ROOT, latest_metadata, manifests, official_url, select_manifest, tag_for, version_tuple
+from upstream import ROOT, latest_metadata, manifests, official_url, reviewed, select_manifest, tag_for, version_tuple
 
 
 def api(endpoint):
@@ -77,7 +77,7 @@ def make_plan(repository, known, metadata=None, dmg_url='', rebuild=False, looku
     name = artifact_name(manifest)
     previous = None if rebuild else lookup(repository, name)
     return {'manifest': manifest, 'artifact_name': name, 'needs_build': previous is None,
-            'previous': previous, 'feed_version': metadata['version'] if metadata else None}
+            'previous': previous, 'feed': metadata}
 
 
 def output(key, value):
@@ -121,10 +121,10 @@ def main():
         else:
             print(f"Building Meta {p['manifest']['version']} + USB.")
         version = p['manifest']['version']
-        if metadata and version_tuple(metadata['version']) > version_tuple(version):
-            compatible = ', '.join(sorted(known, key=version_tuple, reverse=True))
-            summary(f"Meta {metadata['version']} isn’t reviewed for compatibility yet; building the newest "
-                    f"compatible version, {version}. Compatible versions: {compatible}.", warning=True)
+        if not reviewed(p['manifest'], known):
+            versions = ', '.join(sorted(known, key=version_tuple, reverse=True))
+            summary(f"Meta {version} isn’t reviewed yet; patching it by matching code patterns. "
+                    f"Reviewed compatible versions: {versions}.", warning=True)
         elif metadata and metadata['version'] != version:
             summary(f"Meta’s feed reports {metadata['version']}; using the newer reviewed {version} build.")
     else:
@@ -136,8 +136,8 @@ def main():
             raise ValueError('This build is already available.')
         m = p['manifest']
         # Never trust edited/stale plan files as new patch manifests.
-        reviewed = choose_manifest(manifests(), dmg_url=m['url'])
-        if reviewed != m or artifact_name(m) != p['artifact_name']:
+        expected = choose_manifest(manifests(), p['feed'], '' if p['feed'] else m['url'])
+        if expected != m or artifact_name(m) != p['artifact_name']:
             raise ValueError('Build inputs changed. Run the plan step again.')
         dmg = build_dmg(m, args.output, args.dmg, args.verify_install, artifact_filename=p['artifact_name'])
         output('dmg', dmg)
