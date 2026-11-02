@@ -66,7 +66,7 @@ def build(source, target, manifest, identity='-'):
     if not smoke.startswith('Quest VD USB configuration: '):
         raise ValueError('Bundled initializer did not run')
     return {'release': tag_for(manifest), 'upstream_version': manifest['version'],
-            'bundle_id': BUNDLE_ID, 'app_name': APP_NAME, 'upstream_executable_sha256': manifest['executable_sha256'],
+            'bundle_id': BUNDLE_ID, 'app_name': APP_NAME, 'upstream_executable_sha256': sha256(source / EXECUTABLE),
             'patched_executable_sha256': sha256(target / EXECUTABLE), 'patches': changes,
             'vendor_signature_verified': True, 'local_signature_verified': True,
             'config_smoke_passed': True, 'signing': 'ad-hoc' if identity == '-' else 'local identity',
