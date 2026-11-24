@@ -12,7 +12,8 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-from upstream import ROOT, latest_metadata, manifests, official_url, reviewed, select_manifest, tag_for, version_tuple
+from patching import UnsupportedExecutable
+from upstream import ROOT, latest_metadata, manifests, newest_reviewed, official_url, reviewed, select_manifest, tag_for, version_tuple
 
 
 def api(endpoint):
@@ -72,12 +73,33 @@ def existing_artifact(repository, name, now=None):
     return None
 
 
-def make_plan(repository, known, metadata=None, dmg_url='', rebuild=False, lookup=existing_artifact):
+def make_plan(repository, known, metadata=None, dmg_url='', rebuild=False, lookup=existing_artifact, probe=None):
     manifest = choose_manifest(known, metadata, dmg_url)
     name = artifact_name(manifest)
     previous = None if rebuild else lookup(repository, name)
+    fallback_reason = None
+    probed = False
+    if probe and not previous and not reviewed(manifest, known):
+        try:
+            probe(manifest)
+        except UnsupportedExecutable as error:
+            fallback_reason = str(error)
+            manifest = newest_reviewed(known)
+            name = artifact_name(manifest)
+            previous = None if rebuild else lookup(repository, name)
+        else:
+            probed = True
     return {'manifest': manifest, 'artifact_name': name, 'needs_build': previous is None,
-            'previous': previous, 'feed': metadata}
+            'previous': previous, 'feed': metadata, 'fallback_reason': fallback_reason, 'probed': probed}
+
+
+def expected_manifest(plan, known):
+    candidate = choose_manifest(known, plan['feed'], '' if plan['feed'] else plan['manifest']['url'])
+    if plan.get('fallback_reason'):
+        if not plan['feed'] or reviewed(candidate, known):
+            raise ValueError('Fallback requires an unreviewed release from Meta’s feed.')
+        return newest_reviewed(known)
+    return candidate
 
 
 def output(key, value):
@@ -110,22 +132,29 @@ def main():
     probe.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if args.command == 'plan':
+        from quest_usb import probe_app
         url = args.dmg_url.strip()
         metadata = None if url else latest_metadata()
         known = manifests()
-        p = make_plan(args.repository, known, metadata, url, args.rebuild)
+        probe_output = args.output.resolve().with_name('quest-vd-build-probe')
+        p = make_plan(args.repository, known, metadata, url, args.rebuild,
+                      probe=lambda candidate: probe_app(candidate, probe_output))
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(p, indent=2) + '\n')
         output('needs_build', str(p['needs_build']).lower())
         output('artifact_name', p['artifact_name'])
+        output('probed_dmg', probe_output / 'upstream.dmg' if p['probed'] else '')
         if p['previous']:
             summary(f"Already built. [Download your DMG]({p['previous']['url']}).")
         else:
             print(f"Building Meta {p['manifest']['version']} + USB.")
         version = p['manifest']['version']
-        if not reviewed(p['manifest'], known):
+        if p['fallback_reason']:
+            summary(f"Meta {metadata['version']} failed the compatibility probe. {p['fallback_reason']} "
+                    f"Using reviewed Meta {version}.", warning=True)
+        elif not reviewed(p['manifest'], known):
             versions = ', '.join(sorted(known, key=version_tuple, reverse=True))
-            summary(f"Meta {version} isn’t reviewed yet; patching it by matching code patterns. "
+            summary(f"Using compatible Meta {version} from the feed. "
                     f"Reviewed compatible versions: {versions}.", warning=True)
         elif metadata and metadata['version'] != version:
             summary(f"Meta’s feed reports {metadata['version']}; using the newer reviewed {version} build.")
@@ -148,7 +177,7 @@ def main():
             raise ValueError('This build is already available.')
         m = p['manifest']
         # Never trust edited/stale plan files as new patch manifests.
-        expected = choose_manifest(manifests(), p['feed'], '' if p['feed'] else m['url'])
+        expected = expected_manifest(p, manifests())
         if expected != m or artifact_name(m) != p['artifact_name']:
             raise ValueError('Build inputs changed. Run the plan step again.')
         dmg = build_dmg(m, args.output, args.dmg, args.verify_install, artifact_filename=p['artifact_name'])

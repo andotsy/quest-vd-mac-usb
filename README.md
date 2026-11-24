@@ -23,9 +23,9 @@ Apple Silicon · macOS 13.3+ · Meta’s Quest Virtual Display client
 
 ## Next time
 
-**Sync your fork → run Build DMG again.** Unchanged builds are reused; artifacts last 7 days. New Meta versions build automatically, with a warning until reviewed.
+**Sync your fork → run Build DMG again.** The workflow probes new Meta releases before building. If the patches no longer match, it reports why and uses the newest reviewed version. Unchanged builds are reused and artifacts last 7 days.
 
-Reviewed compatible Meta versions: **113.0.0.1.107** and **110.0.0.1.108**.
+Reviewed compatible Meta versions: **115.0.0.1.109**, **113.0.0.1.107**, and **110.0.0.1.108**.
 
 Locally signed, not notarized. [Install & signing](docs/INSTALL.md) · [Build details](docs/MAINTAINING.md)
 

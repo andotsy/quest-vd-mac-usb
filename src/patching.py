@@ -4,9 +4,13 @@ import re
 import struct
 
 
+class UnsupportedExecutable(ValueError):
+    """The original executable does not match the supported patch layout."""
+
+
 def require(condition, message):
     if not condition:
-        raise ValueError(message)
+        raise UnsupportedExecutable(message)
 
 
 def shape_mask(word):

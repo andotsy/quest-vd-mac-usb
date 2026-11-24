@@ -64,9 +64,13 @@ def tag_for(manifest):
     return f"meta-{manifest['version']}-usb.{revision}"
 
 
+def newest_reviewed(known):
+    return known[max(known, key=version_tuple)]
+
+
 def select_manifest(metadata, known):
     """Build Meta’s latest release; the newest reviewed version is a floor during phased rollouts."""
-    newest = known[max(known, key=version_tuple)]
+    newest = newest_reviewed(known)
     if version_tuple(metadata['version']) < version_tuple(newest['version']):
         return newest
     pinned = known.get(metadata['version'])

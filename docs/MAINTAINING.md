@@ -14,13 +14,13 @@ The artifact key includes the upstream hash and build inputs. Unchanged runs lin
 
 ## Version selection
 
-The newest reviewed version is a floor when Meta’s feed lags behind a rollout. A newer or changed release is built from the feed’s size and hash, with a warning listing the reviewed versions; Meta’s signature must verify and every patch pattern must match exactly once. An unreviewed URL stops before downloading.
+The newest reviewed version is a floor when Meta’s feed lags behind a rollout. For a newer or changed release, Build DMG checks the feed’s size and hash, verifies Meta’s signature, and probes the original executable. If the patch layout is incompatible, the workflow logs the reason and uses the newest reviewed build. Downloads and signature verification failures stop the run. A matching release is built from the DMG already downloaded by the probe.
 
 The optional URL accepts a reviewed Meta binary, including regional CDN URLs with the same download ID. Every download still requires the exact size, hash, vendor signature, and original instructions.
 
 ## Probe
 
-**Probe Meta** runs weekly and on demand. It downloads the version Build DMG would pick, verifies it, and checks that every patch pattern still matches and that Meta still declares each setting in `src/overrides.json`. Pattern failures fail the run. A missing setting is a warning; Build DMG logs the same warnings.
+**Probe Meta** runs weekly and on demand. It checks the candidate that Build DMG would try first. An incompatible layout fails this monitoring run so maintainers can see that the latest version needs review. Missing settings in `src/overrides.json` produce warnings.
 
 When Meta stops gating USB but still ships the USB code, the warning says the USB override is no longer needed. Server-side rollouts aren’t visible in the download. GitHub pauses scheduled runs after 60 days without repository activity.
 
