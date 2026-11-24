@@ -1,0 +1,79 @@
+{
+  "version": "115.0.0.1.109",
+  "patch_revision": 6,
+  "url": "https://securecdn-iev1-1.oculus.com/binaries/download/?id=29153217084340451",
+  "size": 53905185,
+  "dmg_sha256": "4aa10ebbf99f7cc18a59e19328894d207636c60c1179ce1d91cd340813fe819b",
+  "patches": [
+    {
+      "purpose": "USB capture target: 120 FPS",
+      "pattern": [
+        "79407408  ldrh w8, [x0, #0x3a]",
+        "52900049  mov w9, #0x8002",
+        "6b09011f  cmp w8, w9",
+        "54000061  b.ne #0x100b12ca8",
+        "52800780  mov w0, #0x3c",
+        "d65f03c0  ret",
+        "f9403400  ldr x0, [x0, #0x68]",
+        "b4000080  cbz x0, #0x100b12cbc",
+        "f9400008  ldr x8, [x0]",
+        "f9405501  ldr x1, [x8, #0xa8]",
+        "d61f0020  br x1",
+        "528003c0  mov w0, #0x1e"
+      ],
+      "index": 4,
+      "after": "52800f00"
+    },
+    {
+      "purpose": "Virtual display modes: 120 Hz",
+      "pattern": [
+        "d2800000  mov x0, #0",
+        "f9000ff5  str x21, [sp, #0x18]",
+        "eb14031f  cmp x24, x20",
+        "540003a0  b.eq #0x10248996c",
+        "52800795  mov w21, #0x3c",
+        "910443f7  add x23, sp, #0x110",
+        "910503f9  add x25, sp, #0x140",
+        "d10243ba  sub x26, x29, #0x90",
+        "f9400308  ldr x8, [x24]",
+        "f900a3e8  str x8, [sp, #0x140]",
+        "b9014bf5  str w21, [sp, #0x148]",
+        "f9008be0  str x0, [sp, #0x110]",
+        "f85803a8  ldur x8, [x29, #-0x80]",
+        "a90b67f7  stp x23, x25, [sp, #0xb0]",
+        "f90063fa  str x26, [sp, #0xc0]",
+        "eb08001f  cmp x0, x8",
+        "540001a2  b.hs #0x102489960",
+        "b9414be8  ldr w8, [sp, #0x148]",
+        "f940a3e9  ldr x9, [sp, #0x140]",
+        "f9000009  str x9, [x0]",
+        "b9000808  str w8, [x0, #8]",
+        "91003008  add x8, x0, #0xc"
+      ],
+      "index": 4,
+      "after": "52800f00"
+    },
+    {
+      "purpose": "VideoToolbox expected frame rate: 120 FPS",
+      "pattern": [
+        "b94012a8  ldr w8, [x21, #0x10]",
+        "aa1403e2  mov x2, x20",
+        "f8020c48  str x8, [x2, #0x20]!",
+        "aa1603e0  mov x0, x22",
+        "52800081  mov w1, #4",
+        "9414bc1b  bl #0x1026f0b80",
+        "aa0003f6  mov x22, x0",
+        "f9400300  ldr x0, [x24]",
+        "b0006228  adrp x8, #0x102e06000",
+        "f9431108  ldr x8, [x8, #0x620]",
+        "f9400101  ldr x1, [x8]",
+        "aa1603e2  mov x2, x22",
+        "9414bc11  bl #0x1026f0b74",
+        "aa0003f3  mov x19, x0"
+      ],
+      "index": 0,
+      "after": "52800f00"
+    }
+  ],
+  "executable_sha256": "4f5a0a9047441c887b5b6ce800e9e12cf24bcfe8eb0f60136d1be58ee11ef3ea"
+}

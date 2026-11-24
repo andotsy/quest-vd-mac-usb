@@ -152,15 +152,45 @@ class PlanTests(unittest.TestCase):
     def test_new_version_builds_from_feed_with_reviewed_patterns(self):
         url = 'https://securecdn-iev1-1.oculus.com/binaries/download/?id=999'
         self.meta.update(version='999.0.0.1', sha256='0' * 64, size=1, url=url)
-        p = ci_build.make_plan('someone/fork', self.known, self.meta, lookup=lambda *a: None)
+        probes = []
+        p = ci_build.make_plan('someone/fork', self.known, self.meta, lookup=lambda *a: None, probe=probes.append)
         m = p['manifest']
         self.assertEqual((m['version'], m['dmg_sha256'], m['size'], m['url']), ('999.0.0.1', '0' * 64, 1, url))
         self.assertEqual(m['patches'], self.m['patches'])
         self.assertNotIn('executable_sha256', m)
         self.assertFalse(upstream.reviewed(m, self.known))
         self.assertTrue(p['needs_build'])
+        self.assertTrue(p['probed'])
+        self.assertEqual(probes, [m])
         # The build step re-derives the same manifest from the saved feed.
-        self.assertEqual(ci_build.choose_manifest(self.known, p['feed']), m)
+        self.assertEqual(ci_build.expected_manifest(p, self.known), m)
+
+    def test_incompatible_latest_uses_reviewed_fallback_and_checks_its_cache(self):
+        self.meta.update(version='999.0.0.1', sha256='0' * 64, size=1)
+        cached = {'id': 4}
+        checked = []
+        def lookup(_repository, name):
+            checked.append(name)
+            return cached if name == ci_build.artifact_name(self.m) else None
+        def incompatible(candidate):
+            self.assertEqual(candidate['version'], self.meta['version'])
+            raise patching.UnsupportedExecutable('display mode does not match')
+        p = ci_build.make_plan('someone/fork', self.known, self.meta, lookup=lookup, probe=incompatible)
+        self.assertEqual(p['manifest'], self.m)
+        self.assertEqual(ci_build.expected_manifest(p, self.known), self.m)
+        self.assertEqual(checked, [ci_build.artifact_name(ci_build.choose_manifest(self.known, self.meta)),
+                                   ci_build.artifact_name(self.m)])
+        self.assertEqual(p['previous'], cached)
+        self.assertEqual(p['fallback_reason'], 'display mode does not match')
+        self.assertFalse(p['probed'])
+        self.assertFalse(p['needs_build'])
+
+    def test_probe_download_failure_stops_plan(self):
+        self.meta.update(version='999.0.0.1', sha256='0' * 64, size=1)
+        def unavailable(_candidate):
+            raise OSError('CDN unavailable')
+        with self.assertRaisesRegex(OSError, 'CDN unavailable'):
+            ci_build.make_plan('someone/fork', self.known, self.meta, rebuild=True, probe=unavailable)
 
     def test_replaced_binary_is_built_unreviewed(self):
         self.meta['sha256'] = '0' * 64

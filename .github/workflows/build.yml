@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Test
         run: python3 -m unittest discover -s tests
-      - name: Check version
+      - name: Check version and probe new releases
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -48,9 +48,13 @@ jobs:
       - name: Build & verify
         id: build
         if: steps.plan.outputs.needs_build == 'true'
-        run: >-
-          "$RUNNER_TEMP/dmg-tools/bin/python" src/ci_build.py build --plan "$RUNNER_TEMP/plan.json"
-          --output "$RUNNER_TEMP/quest-vd-build" --verify-install
+        env:
+          PROBED_DMG: ${{ steps.plan.outputs.probed_dmg }}
+        run: |
+          args=()
+          if [[ -n "$PROBED_DMG" ]]; then args+=(--dmg "$PROBED_DMG"); fi
+          "$RUNNER_TEMP/dmg-tools/bin/python" src/ci_build.py build --plan "$RUNNER_TEMP/plan.json" \
+            --output "$RUNNER_TEMP/quest-vd-build" --verify-install "${args[@]}"
       - name: Save DMG
         id: upload
         if: steps.plan.outputs.needs_build == 'true'
@@ -69,4 +73,4 @@ jobs:
           echo 'Drag the app to **Applications**, then open **Readme.html** inside the DMG and click **Copy command**. Paste into the **Terminal** shortcut.' >> "$GITHUB_STEP_SUMMARY"
       - name: Clean up
         if: always()
-        run: rm -rf "$RUNNER_TEMP/quest-vd-build" "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/dmg-tools"
+        run: rm -rf "$RUNNER_TEMP/quest-vd-build" "$RUNNER_TEMP/quest-vd-build-probe" "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/dmg-tools"
